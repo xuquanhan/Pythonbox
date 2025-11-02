@@ -1,0 +1,368 @@
+Index: Fed_in_Print.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import requests\r\nimport csv\r\nimport os\r\n\r\n# --- 配置 ---\r\nAPI_KEY = \"2360a68c16b805cf2a02db06372ce22c\"\r\nBASE_URL = \"https://fedinprint.org/api\"\r\n# 每页请求多少条记录，最大值似乎是100\r\nITEMS_PER_PAGE = 100\r\n\r\ndef get_articles(keyword=None):\r\n    \"\"\"\r\n    从 Fed in Print API 获取文章数据。\r\n    如果提供了关键词，则按标题搜索。否则，获取所有文章。\r\n    \"\"\"\r\n    if keyword:\r\n        print(f\"正在搜索关键词为 '{keyword}' 的文章...\")\r\n        endpoint = f\"{BASE_URL}/item/search\"\r\n        params = {\"title\": keyword}\r\n    else:\r\n        print(\"准备获取所有文章...\")\r\n        endpoint = f\"{BASE_URL}/item\"\r\n        params = {}\r\n\r\n    # 使用 Session 可以复用TCP连接，并保持headers\r\n    session = requests.Session()\r\n    session.headers.update({\"X-API-Key\": API_KEY})\r\n\r\n    all_articles = []\r\n    page = 1\r\n    \r\n    while True:\r\n        params['limit'] = ITEMS_PER_PAGE\r\n        params['page'] = page\r\n        \r\n        try:\r\n            print(f\"正在获取第 {page} 页...\")\r\n            response = session.get(endpoint, params=params, timeout=30)\r\n            # 检查请求是否成功\r\n            response.raise_for_status() \r\n            \r\n            data = response.json()\r\n            records = data.get(\"records\", [])\r\n\r\n            if not records:\r\n                print(\"未找到更多记录，获取结束。\")\r\n                break\r\n\r\n            for record in records:\r\n                # 提取作者名字并合并成一个字符串\r\n                authors = \", \".join([author.get(\"name\", \"\") for author in record.get(\"author\", [])])\r\n                \r\n                # 提取第一个可用的文件链接\r\n                file_url = \"\"\r\n                if record.get(\"file\"):\r\n                    file_url = record[\"file\"][0].get(\"fileurl\", \"\")\r\n\r\n                all_articles.append({\r\n                    \"title\": record.get(\"title\", \"N/A\"),\r\n                    \"authors\": authors,\r\n                    \"publication_date\": record.get(\"publicationDate\", \"N/A\"), # 注意API返回的字段可能是publicationDate\r\n                    \"abstract\": record.get(\"abstract\", \"N/A\"),\r\n                    \"url\": file_url,\r\n                    \"id\": record.get(\"id\", \"N/A\")\r\n                })\r\n            \r\n            page += 1\r\n\r\n        except requests.exceptions.HTTPError as e:\r\n            print(f\"HTTP 错误: {e}\")\r\n            print(f\"服务器返回内容: {response.text}\")\r\n            break\r\n        except requests.exceptions.RequestException as e:\r\n            print(f\"请求发生错误: {e}\")\r\n            break\r\n        except ValueError: # JSONDecodeError\r\n            print(f\"无法解析返回的 JSON 数据。\")\r\n            print(f\"服务器返回内容: {response.text}\")\r\n            break\r\n\r\n    return all_articles\r\n\r\ndef save_to_csv(articles, filename):\r\n    \"\"\"将文章列表保存到 CSV 文件。\"\"\"\r\n    if not articles:\r\n        print(\"没有找到任何文章，无需创建文件。\")\r\n        return\r\n\r\n    try:\r\n        # 定义CSV文件的表头\r\n        fieldnames = [\"title\", \"authors\", \"publication_date\", \"abstract\", \"url\", \"id\"]\r\n        \r\n        with open(filename, \"w\", newline=\"\", encoding=\"utf-8\") as csvfile:\r\n            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)\r\n            writer.writeheader()\r\n            writer.writerows(articles)\r\n        print(f\"\\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}\")\r\n\r\n    except IOError as e:\r\n        print(f\"写入文件时发生错误: {e}\")\r\n\r\nif __name__ == \"__main__\":\r\n    # 1. 获取用户输入\r\n    search_keyword = input(\"请输入搜索关键词 (直接按 Enter 获取所有文章): \").strip()\r\n\r\n    # 2. 调用函数获取数据\r\n    articles_found = get_articles(search_keyword if search_keyword else None)\r\n\r\n    # 3. 将结果保存到文件\r\n    if articles_found:\r\n        if search_keyword:\r\n            output_filename = f\"fed_articles_{search_keyword.replace(' ', '_')}.csv\"\r\n        else:\r\n            output_filename = \"fed_articles_all.csv\"\r\n        save_to_csv(articles_found, output_filename)\r\n```\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Fed_in_Print.py b/Fed_in_Print.py
+--- a/Fed_in_Print.py	(revision ce45eb6ca02abebf5f162cf3fc69184690bb05ca)
++++ b/Fed_in_Print.py	(date 1754552724133)
+@@ -1,20 +1,23 @@
+ import requests
+ import csv
+ import os
++import re
+ 
+ # --- 配置 ---
+ API_KEY = "2360a68c16b805cf2a02db06372ce22c"
+-BASE_URL = "https://fedinprint.org/api"
+-# 每页请求多少条记录，最大值似乎是100
++BASE_URL = "https://fedinprint.org/api"        # 去掉多余空格
+ ITEMS_PER_PAGE = 100
+ 
++
++def extract_year_from_title(title: str) -> str:
++    """从标题里提取 4 位年份，失败返回 N/A"""
++    m = re.search(r'\b(19|20)\d{2}\b', title)
++    return m.group() if m else "N/A"
++
++
+ def get_articles(keyword=None):
+-    """
+-    从 Fed in Print API 获取文章数据。
+-    如果提供了关键词，则按标题搜索。否则，获取所有文章。
+-    """
+     if keyword:
+-        print(f"正在搜索关键词为 '{keyword}' 的文章...")
++        print(f"正在搜索标题中包含 '{keyword}' 的文章...")
+         endpoint = f"{BASE_URL}/item/search"
+         params = {"title": keyword}
+     else:
+@@ -22,23 +25,20 @@
+         endpoint = f"{BASE_URL}/item"
+         params = {}
+ 
+-    # 使用 Session 可以复用TCP连接，并保持headers
+     session = requests.Session()
+     session.headers.update({"X-API-Key": API_KEY})
+ 
+     all_articles = []
+     page = 1
+-    
++
+     while True:
+         params['limit'] = ITEMS_PER_PAGE
+         params['page'] = page
+-        
++
+         try:
+             print(f"正在获取第 {page} 页...")
+             response = session.get(endpoint, params=params, timeout=30)
+-            # 检查请求是否成功
+-            response.raise_for_status() 
+-            
++            response.raise_for_status()
+             data = response.json()
+             records = data.get("records", [])
+ 
+@@ -47,70 +47,104 @@
+                 break
+ 
+             for record in records:
+-                # 提取作者名字并合并成一个字符串
+-                authors = ", ".join([author.get("name", "") for author in record.get("author", [])])
+-                
+-                # 提取第一个可用的文件链接
++                if not isinstance(record, dict):
++                    continue
++
++                # 作者
++                authors_data = record.get("author", [])
++                if isinstance(authors_data, list):
++                    authors = ", ".join(
++                        a.get("name", "Unknown") if isinstance(a, dict) else str(a)
++                        for a in authors_data
++                    )
++                else:
++                    authors = str(authors_data) if authors_data else "N/A"
++
++                # 文件链接
+                 file_url = ""
+-                if record.get("file"):
+-                    file_url = record["file"][0].get("fileurl", "")
++                if isinstance(record.get("file"), list) and record["file"]:
++                    file_url = (
++                        record["file"][0].get("fileurl", "")
++                        if isinstance(record["file"][0], dict)
++                        else ""
++                    )
++
++                # 出版日期 -> year
++                pub_date = record.get("publication_date") or record.get("publicationDate")
++                year = pub_date if pub_date else extract_year_from_title(
++                    record.get("title", "")
++                )
+ 
+-                all_articles.append({
++                # 页码
++                pages = record.get("pages", "N/A")
++
++                article_data = {
+                     "title": record.get("title", "N/A"),
+                     "authors": authors,
+-                    "publication_date": record.get("publicationDate", "N/A"), # 注意API返回的字段可能是publicationDate
+-                    "abstract": record.get("abstract", "N/A"),
++                    "year": year,
++                    "pages": pages,
+                     "url": file_url,
+-                    "id": record.get("id", "N/A")
+-                })
+-            
++                    "id": record.get("id", "N/A"),
++                }
++
++                # 若指定关键词，只保留标题含关键词的
++                if keyword:
++                    if keyword.lower() in article_data["title"].lower():
++                        all_articles.append(article_data)
++                else:
++                    all_articles.append(article_data)
++
+             page += 1
+-
+         except requests.exceptions.HTTPError as e:
+             print(f"HTTP 错误: {e}")
+-            print(f"服务器返回内容: {response.text}")
+             break
+         except requests.exceptions.RequestException as e:
+-            print(f"请求发生错误: {e}")
++            print(f"请求发生网络错误: {e}")
+             break
+-        except ValueError: # JSONDecodeError
+-            print(f"无法解析返回的 JSON 数据。")
+-            print(f"服务器返回内容: {response.text}")
++        except ValueError:
++            print("无法解析服务器返回的 JSON 数据。")
+             break
+ 
+     return all_articles
+ 
++
+ def save_to_csv(articles, filename):
+-    """将文章列表保存到 CSV 文件。"""
+     if not articles:
+         print("没有找到任何文章，无需创建文件。")
+         return
+-
+     try:
+-        # 定义CSV文件的表头
+-        fieldnames = ["title", "authors", "publication_date", "abstract", "url", "id"]
+-        
+         with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
++            writer = csv.DictWriter(
++                csvfile,
++                fieldnames=["title", "authors", "year", "pages", "url", "id"]
++            )
+             writer.writeheader()
+             writer.writerows(articles)
+-        print(f"\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}")
+-
++        print(f"\n成功! {len(articles)} 条记录已保存到: {os.path.abspath(filename)}")
+     except IOError as e:
+-        print(f"写入文件时发生错误: {e}")
++        print(f"写入文件时发生 I/O 错误: {e}")
++
++
++def display_articles(articles, keyword=None):
++    if not articles:
++        print("未找到任何文章。")
++        return
++    print(f"\n找到 {len(articles)} 篇文章:")
++    print("-" * 80)
++    for i, article in enumerate(articles, 1):
++        print(f"{i}. 标题: {article['title']}")
++        print(f"   作者: {article['authors']}")
++        print(f"   年份: {article['year']}")
++        print(f"   页码: {article['pages']}")
++        print(f"   ID  : {article['id']}")
++        print()
++
+ 
+ if __name__ == "__main__":
+-    # 1. 获取用户输入
+     search_keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()
+-
+-    # 2. 调用函数获取数据
+     articles_found = get_articles(search_keyword if search_keyword else None)
+-
+-    # 3. 将结果保存到文件
++    display_articles(articles_found, search_keyword)
+     if articles_found:
+-        if search_keyword:
+-            output_filename = f"fed_articles_{search_keyword.replace(' ', '_')}.csv"
+-        else:
+-            output_filename = "fed_articles_all.csv"
+-        save_to_csv(articles_found, output_filename)
+-```
++        safe_keyword = search_keyword.replace(' ', '_').replace('/', '_') if search_keyword else "all"
++        output_filename = f"fed_articles_{safe_keyword}.csv"
++        save_to_csv(articles_found, output_filename)
+\ No newline at end of file
+Index: .idea/inspectionProfiles/profiles_settings.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/inspectionProfiles/profiles_settings.xml b/.idea/inspectionProfiles/profiles_settings.xml
+new file mode 100644
+--- /dev/null	(date 1754536294263)
++++ b/.idea/inspectionProfiles/profiles_settings.xml	(date 1754536294263)
+@@ -0,0 +1,6 @@
++<component name="InspectionProjectProfileManager">
++  <settings>
++    <option name="USE_PROJECT_PROFILE" value="false" />
++    <version value="1.0" />
++  </settings>
++</component>
+\ No newline at end of file
+Index: .idea/modules.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+new file mode 100644
+--- /dev/null	(date 1754536294263)
++++ b/.idea/modules.xml	(date 1754536294263)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectModuleManager">
++    <modules>
++      <module fileurl="file://$PROJECT_DIR$/.idea/PythonBox.iml" filepath="$PROJECT_DIR$/.idea/PythonBox.iml" />
++    </modules>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+new file mode 100644
+--- /dev/null	(date 1754536294264)
++++ b/.idea/vcs.xml	(date 1754536294264)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="VcsDirectoryMappings">
++    <mapping directory="" vcs="Git" />
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/misc.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+new file mode 100644
+--- /dev/null	(date 1754536294263)
++++ b/.idea/misc.xml	(date 1754536294263)
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="Black">
++    <option name="sdkName" value="Python 3.13" />
++  </component>
++  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.13" project-jdk-type="Python SDK" />
++</project>
+\ No newline at end of file
+Index: fed_articles_inflation.csv
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/fed_articles_inflation.csv b/fed_articles_inflation.csv
+new file mode 100644
+--- /dev/null	(date 1754552988843)
++++ b/fed_articles_inflation.csv	(date 1754552988843)
+@@ -0,0 +1,38 @@
++title,authors,year,pages,url,id
++The Great Inflation 2.0 Debate,"Evans, Charles L.",N/A,7 pages,http://www.chicagofed.org/webpages/publications/speeches/2009/09.09_CFRNY_speech.cfm,fedhsp:11971
++Inflation and real activity with firm-level productivity shocks,"Wolman, Alexander L., Dotsey, Michael, King, Robert G.",N/A,N/A,https://www.philadelphiafed.org/-/media/frbp/assets/working-papers/2013/wp13-35.pdf,fedpwp:3805:original
++In brief: economic capsules: an overview of inflation measurement,"Wu, Lucille, Brauer, David A.",N/A,25-29,https://www.newyorkfed.org/medialibrary/media/research/quarterly_review/1991v16/v16n2article3.pdf,fednqr:28085
++Survey measures of expected inflation : revisiting the issues of predictive content and rationality,"Mehra, Yash P.",N/A,17-36,https://www.richmondfed.org/-/media/RichmondFedOrg/publications/research/economic_quarterly/2002/summer/pdf/mehra.pdf,fedreq:26215
++Optimal Inflation Target with Expectations-Driven Liquidity Traps,"Nakata, Taisuke, Coyle, Philip",N/A,31 pages,https://www.federalreserve.gov/econres/feds/files/2019036pap.pdf,fedgfe:34134:original
++Exchange rate rules in support of disinflation programs in developing countries,"Kamin, Steven B.",N/A,N/A,http://www.federalreserve.gov/pubs/ifdp/1991/402/default.htm,fedgif:37417:original
++"Price- and wage- inflation targeting: variations on a theme by Erceg, Henderson, and Levin","Diba, Behzad T., Canzoneri, Matthew B., Cumby, Robert E.",N/A,181-215,http://www.federalreserve.gov/events/conferences/mmp2004/pdf/Canzoneri-Cumby-Diba.pdf,fedgpr:540
++"Managing a New Policy Framework: Paul Volcker, the St. Louis Fed, and the 1979-82 War on Inflation","Wheelock, David C., Kliesen, Kevin L.",1979,31 pages,https://s3.amazonaws.com/real.stlouisfed.org/wp/2020/2020-022.pdf,fedlwp:88437:original
++"Indexes, inflation, and public policy","Runyon, Herbert",N/A,44-56,https://www.frbsf.org/wp-content/uploads/81-2_44-56.pdf,fedfer:23091
++"Bullard: Mindful of inflation’s potential to ""mess up economic performance""","Bullard, James B.",N/A,N/A,https://www.minneapolisfed.org/article/2022/bullard-mindful-of-inflations-potential-to-mess-up-economic-performance,fedlps:93713
++"Bullard Talks with The Economist about Inflation, U.S. Economy Growth","Bullard, James B.",N/A,N/A,https://www.stlouisfed.org/from-the-president/media-interviews/2022/bullard-inflation-us-economy-growth-economist,fedlps:94328
++Implications of low inflation rates for monetary policy,"Rosengren, Eric",N/A,12 pages,http://www.bostonfed.org/news/speeches/rosengren/2014/111014/index.htm,fedbsp:11888
++Inflation Levels and (In)Attention,"Tang, Jenny, Bracha, Anat",N/A,45,https://www.bostonfed.org/publications/research-department-working-paper/2022/inflation-levels-and-in-attention.aspx,fedbwp:93857:original
++Racial Unemployment Gaps and the Disparate Impact of the Inflation Tax,"Baughman, Garth, van Buggenum, Hugo, Ait Lahcen, Mohammed",N/A,N/A,https://www.minneapolisfed.org/institute/working-papers-institute/iwp73.pdf,fedmoi:96260:original
++"Hawks, doves, bubbles, and inflation targets","Bullard, James B.",N/A,N/A,http://research.stlouisfed.org/econ/bullard/pdf/Bullard_Utah_April_16_2012_Final.pdf,fedlps:33388
++"GDP Growth, Decelerating Inflation in U.S. Economic Outlook","Kliesen, Kevin L.",N/A,N/A,https://www.stlouisfed.org/publications/regional-economist/2022/aug/gdp-growth-decelerating-inflation-us-economic-outlook,fedlre:94761
++Shoe-leather costs of inflation and policy credibility,"Pakko, Michael R.",N/A,37-50,https://files.stlouisfed.org/files/htdocs/publications/review/98/11/9811mp.pdf,fedlrv:25737
++Inflation-induced valuation errors in the stock market,"Lansing, Kevin J.",N/A,N/A,http://www.frbsf.org/publications/economics/letter/2004/el2004-30.html,fedfel:2576
++"The politics of inflation targeting: a speech at the Euromoney Inflation Conference, Paris, France, May 26, 2005","Gramlich, Edward M.",2005,N/A,http://www.federalreserve.gov/boarddocs/speeches/2005/20050526/default.htm,fedgsq:22760
++Drivers of Inflation: The New York Fed DSGE Model’s Perspective,"Tambalotti, Andrea, Gleich, Aidan, Goyal, Shlok, Del Negro, Marco, Johnson, Alissa",N/A,N/A,https://libertystreeteconomics.newyorkfed.org/2022/03/drivers-of-inflation-the-new-york-fed-dsge-models-perspective/,fednls:93778
++"The relationship between expected inflation, disagreement, and uncertainty: evidence from matched point and density forecasts","Rich, Robert W., Tracy, Joseph",N/A,48 pages,https://www.newyorkfed.org/medialibrary/media/research/staff_reports/sr253.html,fednsr:12316
++Fiscal policy and excess inflation during Covid-19: a cross-country view,"de Soyres, Francois, Young, Henry L., Santacreu, Ana Maria",N/A,N/A,https://www.federalreserve.gov//econres/notes/feds-notes/fiscal-policy-and-excess-inflation-during-covid-19-a-cross-country-view-20220715.htm,fedgfn:94501
++Are stocks a hedge against inflation?  International evidence using cointegration analysis,"Robinson, Kenneth J., Ely, David P.",N/A,N/A,,feddfi:721:original
++Decline in Number of Workers with “Some College” Is Boosting Healthcare Wage Inflation,"Pollard, Emily",N/A,4,https://www.kansascityfed.org/Economic%20Bulletin/documents/9937/EconomicBulletin23Pollard1220.pdf,fedkeb:97574
++Reading inflation expectations from CPI futures,"Kliesen, Kevin L., Guo, Hui",N/A,N/A,https://files.stlouisfed.org/files/htdocs/datatrends/pdfs/net/20050201/cover.pdf,fedlne:42148
++"Inflation, financial markets and capital formation","Boyd, John H., Smith, Bruce, Choi, Sangmok",N/A,9-35,http://research.stlouisfed.org/publications/review/96/05/9605sc1.pdf,fedlpr:30317
++K-core inflation,"Wolman, Alexander L.",N/A,415-430,https://www.richmondfed.org/-/media/RichmondFedOrg/publications/research/economic_quarterly/2011/q4/pdf/wolman.pdf,fedreq:26409
++Does money matter in inflation forecasting?,"Jones, Barry E., Anderson, Richard G., Kendall, Graham, Tepper, Jonathan, Binner, Jane M., Tino, Peter",N/A,N/A,https://s3.amazonaws.com/real.stlouisfed.org/wp/2009/2009-030.pdf,fedlwp:10440:original
++What to Make of Market Measures of Inflation Expectations?,"Lucca, David O., Schaumburg, Ernst",N/A,N/A,https://libertystreeteconomics.newyorkfed.org/2011/08/what-to-make-of-market-measures-of-inflation-expectations.html,fednls:86760
++Stopping moderate inflations: the methods of Poincaré and Thatcher,"Sargent, Thomas J.",N/A,N/A,http://www.minneapolisfed.org/research/common/pub_detail.cfm?pb_autonum_id=510,fedmwp:42386:original
++Inflation and money growth under alternative monetary standards,"Weber, Warren E., Rolnick, Arthur J.",N/A,N/A,http://www.minneapolisfed.org/research/common/pub_detail.cfm?pb_autonum_id=456,fedmwp:42635:original
++Detecting Inflation Instability,"Wolman, Alexander L.",N/A,N/A,https://www.richmondfed.org/publications/research/economic_brief/2023/eb_23-11,fedreb:95942
++"Outstanding issues in the analysis of inflation: a speech at the Federal Reserve Bank of Boston’s 52nd Annual Economic Conference, Chatham, Massachusetts, June 9, 2008","Bernanke, Ben S.",2008,N/A,http://www.federalreserve.gov/newsevents/speech/bernanke20080609a.htm,fedgsq:23060
++Inflation: Drivers and Dynamics 2019 Conference Summary,"Wiederholt, Mirko, Paustian, Matthias, Tielens, Joris, Ryngaert, Jane, Blanco, Andres, Kim, Mina, Schoenle, Raphael, Zhang, Tony, Knotek, Edward S., Rich, Robert W., Weber, Michael",2019,6,https://doi.org/10.26509/frbc-ec-201922,fedcec:86676
++The origin and impact of inflation,"Francis, Darryl R.",N/A,18-22,https://fraser.stlouisfed.org/scribd/?toc_id=500158&filepath=/docs/publications/frbslreview/rev_stls_197512.pdf&start_page=18#scribd-open,fedlrv:25101
++Inflation and financial markets,anonymous,N/A,3-4,https://www.frbsf.org/wp-content/uploads/75-4_3-4.pdf,fedfer:23401
++Inflation: an extreme view,"Kareken, John H.",N/A,N/A,https://www.minneapolisfed.org/research/qr/qr212.pdf,fedmqr:41627
+Index: .idea/.gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+new file mode 100644
+--- /dev/null	(date 1754536294257)
++++ b/.idea/.gitignore	(date 1754536294257)
+@@ -0,0 +1,8 @@
++# 默认忽略的文件
++/shelf/
++/workspace.xml
++# 基于编辑器的 HTTP 客户端请求
++/httpRequests/
++# Datasource local storage ignored files
++/dataSources/
++/dataSources.local.xml
+Index: .idea/PythonBox.iml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/PythonBox.iml b/.idea/PythonBox.iml
+new file mode 100644
+--- /dev/null	(date 1754536294257)
++++ b/.idea/PythonBox.iml	(date 1754536294257)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<module type="PYTHON_MODULE" version="4">
++  <component name="NewModuleRootManager">
++    <content url="file://$MODULE_DIR$" />
++    <orderEntry type="jdk" jdkName="Python 3.13" jdkType="Python SDK" />
++    <orderEntry type="sourceFolder" forTests="false" />
++  </component>
++</module>
+\ No newline at end of file
