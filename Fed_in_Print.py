@@ -1,19 +1,14 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import requests
 import csv
 import os
 import re
-import sys
+from dotenv import load_dotenv
 
-# 设置标准输出编码为UTF-8，解决Windows命令行中文乱码问题
-if sys.platform.startswith('win'):
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# 加载环境变量
+load_dotenv()
 
 # --- 配置 ---
-API_KEY = "2360a68c16b805cf2a02db06372ce22c"
+API_KEY = os.getenv("FED_IN_PRINT_API_KEY")
 BASE_URL = "https://fedinprint.org/api"
 ITEMS_PER_PAGE = 100
 
@@ -21,15 +16,15 @@ ITEMS_PER_PAGE = 100
 def ask_search_scope() -> int:
     while True:
         choice = input(
-            "请输入搜索范围：\n"
+            "请选择搜索范围：\n"
             "0 - 标题 + 摘要\n"
-            "1 - 标题\n"
-            "2 - 摘要\n"
+            "1 - 仅标题\n"
+            "2 - 仅摘要\n"
             "请输入 0 / 1 / 2："
         ).strip()
         if choice in {"0", "1", "2"}:
             return int(choice)
-        print("输入无效，请重新输入：")
+        print("输入无效，请重新输入。")
 
 
 def extract_year_from_title(title: str) -> str:
@@ -49,12 +44,17 @@ def build_endpoint_and_params(scope: int, keyword: str):
 
 
 def get_articles(keyword: str, scope: int):
+    # 检查API密钥
+    if not API_KEY or API_KEY == "YOUR_API_KEY_HERE":
+        print("错误: 请在.env文件中设置FED_IN_PRINT_API_KEY环境变量")
+        return []
+
     endpoint, params = build_endpoint_and_params(scope, keyword)
     if keyword:
-        scope_desc = ["标题+摘要", "标题", "摘要"][scope]
+        scope_desc = ["标题+摘要", "仅标题", "仅摘要"][scope]
         print(f"正在搜索 {scope_desc} 中包含'{keyword}' 的文章..")
     else:
-        print("正在获取所有文章..")
+        print("准备获取所有文章..")
 
     session = requests.Session()
     session.headers.update({"X-API-Key": API_KEY})
@@ -69,7 +69,7 @@ def get_articles(keyword: str, scope: int):
             data = session.get(endpoint, params=params, timeout=30).json()
             records = data.get("records", [])
             if not records:
-                print("没有更多结果，获取完毕。")
+                print("未找到更多记录，获取结束。")
                 break
 
             for rec in records:
@@ -135,7 +135,6 @@ def save_to_csv(articles, filename):
     try:
         # 现在把 abstract 正式加进 CSV
         fieldnames = ["title", "authors", "year", "pages", "url", "id", "abstract"]
-        # 使用 utf-8-sig 编码解决 Excel 打开中文乱码问题
         with open(filename, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
@@ -147,13 +146,13 @@ def save_to_csv(articles, filename):
 
 def display_articles(articles):
     if not articles:
-        print("没有获取到文章。")
+        print("未找到任何文章。")
         return
-    print(f"\n获取到 {len(articles)} 篇文章")
+    print(f"\n找到 {len(articles)} 篇文章")
     print("-" * 80)
     for i, art in enumerate(articles, 1):
         print(f"{i}. 标题  : {art['title']}")
-        print(f"   作者  : {art['authors']}")
+        print(f"   作者 : {art['authors']}")
         print(f"   年份  : {art['year']}")
         print(f"   页码  : {art['pages']}")
         print(f"   ID    : {art['id']}")
@@ -162,7 +161,7 @@ def display_articles(articles):
 
 
 if __name__ == "__main__":
-    keyword = input("请输入搜索关键词 (按 Enter 获取所有文章): ").strip()
+    keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()
     scope = ask_search_scope()
     articles = get_articles(keyword, scope)
     display_articles(articles)
