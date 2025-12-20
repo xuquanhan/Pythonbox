@@ -1,107 +1,130 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import requests
 import csv
 import os
+import re
+import sys
+
+# 设置标准输出编码为UTF-8，解决Windows命令行中文乱码问题
+if sys.platform.startswith('win'):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # --- 配置 ---
 API_KEY = "2360a68c16b805cf2a02db06372ce22c"
-BASE_URL = "https://fedinprint.org/api"  # 注意：没有尾随空格
+BASE_URL = "https://fedinprint.org/api"
 ITEMS_PER_PAGE = 100
 
 
-def get_articles(keyword=None):
+def ask_search_scope() -> int:
+    while True:
+        choice = input(
+            "请输入搜索范围：\n"
+            "0 - 标题 + 摘要\n"
+            "1 - 标题\n"
+            "2 - 摘要\n"
+            "请输入 0 / 1 / 2："
+        ).strip()
+        if choice in {"0", "1", "2"}:
+            return int(choice)
+        print("输入无效，请重新输入：")
+
+
+def extract_year_from_title(title: str) -> str:
+    m = re.search(r'\b(19|20)\d{2}\b', title)
+    return m.group() if m else "N/A"
+
+
+def build_endpoint_and_params(scope: int, keyword: str):
+    if not keyword:
+        return f"{BASE_URL}/item", {}
+    if scope == 0:
+        return f"{BASE_URL}/item/search", {"title": keyword, "abstract": keyword}
+    elif scope == 1:
+        return f"{BASE_URL}/item/search", {"title": keyword}
+    else:  # scope == 2
+        return f"{BASE_URL}/item/search", {"abstract": keyword}
+
+
+def get_articles(keyword: str, scope: int):
+    endpoint, params = build_endpoint_and_params(scope, keyword)
     if keyword:
-        print(f"正在搜索标题中包含 '{keyword}' 的文章...")
-        endpoint = f"{BASE_URL}/item/search"
-        params = {"title": keyword}
+        scope_desc = ["标题+摘要", "标题", "摘要"][scope]
+        print(f"正在搜索 {scope_desc} 中包含'{keyword}' 的文章..")
     else:
-        print("准备获取所有文章...")
-        endpoint = f"{BASE_URL}/item"
-        params = {}
+        print("正在获取所有文章..")
+
     session = requests.Session()
     session.headers.update({"X-API-Key": API_KEY})
 
     all_articles = []
     page = 1
-
     while True:
         params['limit'] = ITEMS_PER_PAGE
         params['page'] = page
 
         try:
-            print(f"正在获取第 {page} 页...")
-            response = session.get(endpoint, params=params, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            print(f"API响应内容: {data}")  # 添加调试信息
+            data = session.get(endpoint, params=params, timeout=30).json()
             records = data.get("records", [])
-
             if not records:
-                print("未找到更多记录，获取结束。")
+                print("没有更多结果，获取完毕。")
                 break
 
-            for record in records:
-                # 检查record是否为字典，如果不是则跳过
-                if not isinstance(record, dict):
-                    print(f"警告: 跳过无效记录类型 {type(record)}")
+            for rec in records:
+                if not isinstance(rec, dict):
                     continue
 
-                # 安全处理作者信息
-                authors = "N/A"
-                try:
-                    authors_data = record.get("author", [])
-                    if isinstance(authors_data, list):
-                        author_names = []
-                        for author in authors_data:
-                            if isinstance(author, dict):
-                                author_names.append(author.get("name", "Unknown"))
-                            else:
-                                author_names.append(str(author))
-                        authors = ", ".join(author_names)
-                    else:
-                        authors = str(authors_data) if authors_data else "N/A"
-                except Exception as e:
-                    record_id = "未知"
-                    if isinstance(record, dict):
-                        record_id = record.get('id', 'N/A')
-                    print(f"处理作者信息时出错 (ID: {record_id}): {e}")
-                    authors = "N/A"
+                authors_data = rec.get("author", [])
+                if isinstance(authors_data, list):
+                    authors = ", ".join(
+                        a.get("name", "Unknown") if isinstance(a, dict) else str(a)
+                        for a in authors_data
+                    )
+                else:
+                    authors = str(authors_data) if authors_data else "N/A"
 
                 file_url = ""
-                if isinstance(record.get("file"), list) and len(record["file"]) > 0:
-                    file_url = record["file"][0].get("fileurl", "") if isinstance(record["file"][0], dict) else ""
+                if isinstance(rec.get("file"), list) and rec["file"]:
+                    file_url = (
+                        rec["file"][0].get("fileurl", "")
+                        if isinstance(rec["file"][0], dict)
+                        else ""
+                    )
+
+                pub_date = rec.get("publication_date") or rec.get("publicationDate")
+                year = pub_date if pub_date else extract_year_from_title(rec.get("title", ""))
 
                 article_data = {
-                    "title": record.get("title", "N/A") if isinstance(record, dict) else "N/A",
+                    "title": rec.get("title", "N/A"),
                     "authors": authors,
-                    "publication_date": record.get("publication_date",
-                                                   record.get("publicationDate", "N/A")) if isinstance(record,
-                                                                                                       dict) else "N/A",
-                    "abstract": record.get("abstract", "N/A") if isinstance(record, dict) else "N/A",
+                    "year": year,
+                    "pages": rec.get("pages", "N/A"),
                     "url": file_url,
-                    "id": record.get("id", "N/A") if isinstance(record, dict) else "N/A"
+                    "id": rec.get("id", "N/A"),
+                    "abstract": rec.get("abstract", "N/A"),
                 }
-                
-                # 如果指定了关键词，则只添加标题中包含关键词的文章
+
+                # 过滤逻辑
                 if keyword:
-                    title = article_data.get("title", "").lower()
-                    if title and keyword.lower() in title:
+                    title_lower = article_data["title"].lower()
+                    abstract_lower = article_data["abstract"].lower()
+                    kw_lower = keyword.lower()
+
+                    if scope == 0 and (kw_lower in title_lower or kw_lower in abstract_lower):
+                        all_articles.append(article_data)
+                    elif scope == 1 and kw_lower in title_lower:
+                        all_articles.append(article_data)
+                    elif scope == 2 and kw_lower in abstract_lower:
                         all_articles.append(article_data)
                 else:
                     all_articles.append(article_data)
-                    
-            page += 1
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP 错误: {e}")
-            print(f"服务器可能拒绝了请求或出现了问题。服务器返回内容: {response.text}")
-            break
-        except requests.exceptions.RequestException as e:
-            print(f"请求发生网络错误: {e}")
-            break
-        except ValueError:
-            print(f"无法解析服务器返回的 JSON 数据。")
-            print(f"服务器返回内容: {response.text}")
-            break
 
+            page += 1
+        except Exception as e:
+            print("请求出错:", e)
+            break
     return all_articles
 
 
@@ -109,55 +132,40 @@ def save_to_csv(articles, filename):
     if not articles:
         print("没有找到任何文章，无需创建文件。")
         return
-
     try:
-        fieldnames = ["title", "authors", "publication_date", "abstract", "url", "id"]
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        # 现在把 abstract 正式加进 CSV
+        fieldnames = ["title", "authors", "year", "pages", "url", "id", "abstract"]
+        # 使用 utf-8-sig 编码解决 Excel 打开中文乱码问题
+        with open(filename, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(articles)
-        print(f"\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}")
+        print(f"\n成功! {len(articles)} 条记录已保存到 {os.path.abspath(filename)}")
     except IOError as e:
-        print(f"写入文件时发生 I/O 错误: {e}")
+        print("写入文件时发生 I/O 错误:", e)
 
 
-def display_articles(articles, keyword=None):
-    """
-    显示文章列表
-    """
+def display_articles(articles):
     if not articles:
-        print("未找到任何文章。")
+        print("没有获取到文章。")
         return
-
-    print(f"\n找到 {len(articles)} 篇文章:")
+    print(f"\n获取到 {len(articles)} 篇文章")
     print("-" * 80)
-
-    for i, article in enumerate(articles, 1):
-        title = article.get("title", "N/A")
-        authors = article.get("authors", "N/A")
-        pub_date = article.get("publication_date", "N/A")
-
-        print(f"{i}. 标题: {title}")
-        print(f"   作者: {authors}")
-        print(f"   发布日期: {pub_date}")
-        print(f"   ID: {article.get('id', 'N/A')}")
+    for i, art in enumerate(articles, 1):
+        print(f"{i}. 标题  : {art['title']}")
+        print(f"   作者  : {art['authors']}")
+        print(f"   年份  : {art['year']}")
+        print(f"   页码  : {art['pages']}")
+        print(f"   ID    : {art['id']}")
+        print(f"   摘要  : {art['abstract'][:300]}{'...' if len(art['abstract']) > 300 else ''}")
         print()
 
 
 if __name__ == "__main__":
-    search_keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()
-
-    # 获取文章
-    articles_found = get_articles(search_keyword if search_keyword else None)
-
-    # 显示文章列表
-    display_articles(articles_found, search_keyword)
-
-    # 保存到CSV文件
-    if articles_found:
-        if search_keyword:
-            safe_keyword = search_keyword.replace(' ', '_').replace('/', '_')
-            output_filename = f"fed_articles_{safe_keyword}.csv"
-        else:
-            output_filename = "fed_articles_all.csv"
-        save_to_csv(articles_found, output_filename)
+    keyword = input("请输入搜索关键词 (按 Enter 获取所有文章): ").strip()
+    scope = ask_search_scope()
+    articles = get_articles(keyword, scope)
+    display_articles(articles)
+    if articles:
+        safe = keyword.replace(' ', '_').replace('/', '_') if keyword else "all"
+        save_to_csv(articles, f"fed_articles_{safe}.csv")
