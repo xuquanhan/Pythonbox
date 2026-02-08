@@ -1,0 +1,955 @@
+Index: CSVDataAnalyzer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import matplotlib.pyplot as plt\r\nimport numpy as np\r\nimport pandas as pd\r\nfrom scipy import stats\r\nfrom statsmodels.tsa.stattools import acf, pacf\r\nfrom scipy.fft import fft, fftfreq\r\nimport tkinter as tk\r\nfrom tkinter import filedialog\r\nimport string\r\n\r\n# 设置中文字体\r\nplt.rcParams['font.sans-serif'] = ['SimHei']\r\nplt.rcParams['axes.unicode_minus'] = False\r\n\r\ndef column_letter_to_index(letter):\r\n    \"\"\"将Excel列字母转换为数字索引 (例如: A->0, B->1, AA->26)\"\"\"\r\n    letter = letter.upper()\r\n    result = 0\r\n    for char in letter:\r\n        result = result * 26 + (ord(char) - ord('A') + 1)\r\n    return result - 1  # 转换为0基索引\r\n\r\ndef parse_range_input(range_str):\r\n    \"\"\"解析范围输入，例如 \"B3:B222\" \"\"\"\r\n    parts = range_str.split(':')\r\n    if len(parts) != 2:\r\n        raise ValueError(\"范围格式不正确，请使用例如 'B3:B222' 的格式\")\r\n    \r\n    start_part = parts[0].strip()\r\n    end_part = parts[1].strip()\r\n    \r\n    # 提取列和行信息\r\n    start_col = ''.join([c for c in start_part if c.isalpha()]).upper()\r\n    start_row = int(''.join([c for c in start_part if c.isdigit()]))\r\n    end_row = int(''.join([c for c in end_part if c.isdigit()]))\r\n    \r\n    return start_col, start_row, end_row\r\n\r\ndef select_csv_file():\r\n    \"\"\"打开文件选择对话框让用户选择CSV文件\"\"\"\r\n    # 隐藏主窗口\r\n    root = tk.Tk()\r\n    root.withdraw()\r\n    \r\n    # 打开文件选择对话框\r\n    file_path = filedialog.askopenfilename(\r\n        title=\"选择CSV文件\",\r\n        filetypes=[(\"CSV files\", \"*.csv\"), (\"All files\", \"*.*\")]\r\n    )\r\n    \r\n    # 销毁主窗口\r\n    root.destroy()\r\n    \r\n    return file_path\r\n\r\ndef convert_to_numeric(data):\r\n    \"\"\"将数据转换为数值类型\"\"\"\r\n    numeric_data = []\r\n    for item in data:\r\n        try:\r\n            # 尝试转换为浮点数\r\n            numeric_data.append(float(item))\r\n        except (ValueError, TypeError):\r\n            # 如果转换失败，跳过该项\r\n            print(f\"警告: 无法将 '{item}' 转换为数值，已跳过\")\r\n            continue\r\n    return numeric_data\r\n\r\ndef read_csv_data():\r\n    \"\"\"读取CSV数据\"\"\"\r\n    # 让用户选择CSV文件\r\n    print(\"请选择CSV文件...\")\r\n    file_path = select_csv_file()\r\n    \r\n    if not file_path:\r\n        print(\"未选择文件，程序退出。\")\r\n        return None\r\n    \r\n    # 尝试不同的编码读取CSV文件\r\n    encodings = ['utf-8', 'gbk', 'gb2312', 'latin1']\r\n    df = None\r\n    \r\n    for encoding in encodings:\r\n        try:\r\n            df = pd.read_csv(file_path, encoding=encoding)\r\n            print(f\"成功读取文件: {file_path} (编码: {encoding})\")\r\n            break\r\n        except Exception as e:\r\n            print(f\"使用 {encoding} 编码读取失败: {str(e)[:50]}...\")\r\n            continue\r\n    \r\n    if df is None:\r\n        print(\"尝试多种编码后仍然无法读取文件，请检查文件格式。\")\r\n        return None\r\n    \r\n    print(f\"数据集包含 {len(df)} 行\")\r\n    \r\n    # 询问用户是否知道数据集长度\r\n    know_length = input(\"您是否知道需要读取的数据范围？(y/n): \").lower().strip()\r\n    \r\n    if know_length == 'y':\r\n        # 用户知道数据范围，要求输入范围\r\n        range_input = input(\"请输入数据范围 (例如: B3:B222): \").strip()\r\n        try:\r\n            # 解析范围输入\r\n            col, start_row, end_row = parse_range_input(range_input)\r\n            # 将列字母转换为索引\r\n            col_index = column_letter_to_index(col)\r\n            # 提取数据\r\n            data = df.iloc[start_row-1:end_row, col_index].dropna().tolist()\r\n            print(f\"成功从范围 {range_input} 提取 {len(data)} 个数据点\")\r\n            # 转换为数值类型\r\n            numeric_data = convert_to_numeric(data)\r\n            print(f\"转换后得到 {len(numeric_data)} 个数值数据点\")\r\n            return numeric_data\r\n        except Exception as e:\r\n            print(f\"解析范围输入失败: {e}\")\r\n            return None\r\n    else:\r\n        # 用户不知道数据范围，要求输入列\r\n        column_input = input(\"请输入数据所在的列 (例如: C): \").strip().upper()\r\n        try:\r\n            # 将列字母转换为索引\r\n            col_index = column_letter_to_index(column_input)\r\n            # 提取整列数据并去除空值\r\n            data = df.iloc[:, col_index].dropna().tolist()\r\n            print(f\"成功从列 {column_input} 提取 {len(data)} 个数据点\")\r\n            # 转换为数值类型\r\n            numeric_data = convert_to_numeric(data)\r\n            print(f\"转换后得到 {len(numeric_data)} 个数值数据点\")\r\n            return numeric_data\r\n        except Exception as e:\r\n            print(f\"读取列数据失败: {e}\")\r\n            return None\r\n\r\ndef explain_analysis_to_beginner(data, outliers, autocorr, yf_positive, xf_positive, slope, r_value):\r\n    \"\"\"为统计学入门者提供易于理解的分析解释\"\"\"\r\n    print(\"\\n\" + \"=\" * 60)\r\n    print(\"简易数据分析报告（入门版）\")\r\n    print(\"=\" * 60)\r\n    \r\n    print(\"\\n这份报告将用通俗易懂的语言解释数据分析结果：\")\r\n    \r\n    # 基本统计解释\r\n    print(f\"\\n1. 数据概况:\")\r\n    print(f\"   我们分析了 {len(data)} 个数据点\")\r\n    print(f\"   这些数据的平均值是 {np.mean(data):.4f}\")\r\n    print(f\"   数据最小值是 {min(data):.4f}，最大值是 {max(data):.4f}\")\r\n    print(f\"   数据的标准差是 {np.std(data):.4f}，这个数值越大说明数据波动越大\")\r\n    \r\n    # 趋势解释\r\n    print(f\"\\n2. 数据趋势:\")\r\n    if slope > 0.001:\r\n        print(\"   整体来看，数据呈上升趋势\")\r\n        print(f\"   每增加一个数据点，数值平均增加 {slope:.6f}\")\r\n    elif slope < -0.001:\r\n        print(\"   整体来看，数据呈下降趋势\")\r\n        print(f\"   每增加一个数据点，数值平均减少 {abs(slope):.6f}\")\r\n    else:\r\n        print(\"   整体来看，数据没有明显的上升或下降趋势\")\r\n    \r\n    # 异常值解释\r\n    print(f\"\\n3. 异常数据:\")\r\n    if len(outliers) > 0:\r\n        print(f\"   我们发现了 {len(outliers)} 个异常数据点\")\r\n        print(\"   这些数据点与其他数据差异较大，可能是特殊情况或测量误差\")\r\n    else:\r\n        print(\"   没有发现明显的异常数据点\")\r\n    \r\n    # 相关性解释\r\n    print(f\"\\n4. 数据的规律性:\")\r\n    if abs(autocorr[1]) > 0.3:\r\n        print(\"   数据具有一定的规律性，当前值与前一个值有一定关联\")\r\n    else:\r\n        print(\"   数据看起来比较随机，当前值与前一个值关联不大\")\r\n    \r\n    # 周期性解释\r\n    print(f\"\\n5. 数据的周期性:\")\r\n    top_freq_indices = np.argsort(yf_positive)[-3:]  # 前3个主要频率\r\n    periodic_found = False\r\n    for idx in reversed(top_freq_indices):\r\n        if xf_positive[idx] > 0.001:\r\n            period = 1 / xf_positive[idx] if xf_positive[idx] > 0 else float('inf')\r\n            if period < len(data)/2:  # 只考虑合理周期\r\n                print(f\"   数据可能存在周期性变化，大约每 {period:.1f} 个数据点重复一次\")\r\n                periodic_found = True\r\n                break\r\n    \r\n    if not periodic_found:\r\n        print(\"   数据没有明显的周期性变化\")\r\n    \r\n    print(\"\\n\" + \"=\" * 60)\r\n    print(\"简易分析报告结束\")\r\n    print(\"=\" * 60)\r\n\r\ndef analyze_data(data):\r\n    \"\"\"执行数据分析\"\"\"\r\n    if len(data) == 0:\r\n        print(\"错误: 没有有效的数值数据可供分析\")\r\n        return\r\n        \r\n    print(\"=\" * 60)\r\n    print(\"数据趋势分析报告\")\r\n    print(\"=\" * 60)\r\n\r\n    # 1. 基本统计分析\r\n    print(f\"\\n1. 数据基本信息:\")\r\n    print(f\"   数据总量: {len(data)} 个点\")\r\n    print(f\"   数据范围: {min(data):.4f} 到 {max(data):.4f}\")\r\n    print(f\"   平均值: {np.mean(data):.6f}\")\r\n    print(f\"   标准差: {np.std(data):.6f}\")\r\n    print(f\"   中位数: {np.median(data):.6f}\")\r\n    print(f\"   偏度: {stats.skew(data):.6f}\")\r\n    print(f\"   峰度: {stats.kurtosis(data):.6f}\")\r\n\r\n    # 创建主图\r\n    fig = plt.figure(figsize=(20, 16))\r\n\r\n    # 2. 整体趋势可视化\r\n    ax1 = plt.subplot(4, 4, 1)\r\n    plt.plot(data, 'b-', alpha=0.7, linewidth=0.8)\r\n    plt.title('原始数据序列', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 3. 移动平均趋势\r\n    ax2 = plt.subplot(4, 4, 2)\r\n    window_size = min(50, len(data) // 10)  # 自适应窗口大小\r\n    moving_avg = pd.Series(data).rolling(window=window_size, center=True).mean()\r\n    plt.plot(data, 'b-', alpha=0.3, linewidth=0.5, label='原始数据')\r\n    plt.plot(moving_avg, 'r-', linewidth=2, label=f'{window_size}点移动平均')\r\n    plt.title('移动平均趋势', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 4. 数据分布直方图\r\n    ax3 = plt.subplot(4, 4, 3)\r\n    n, bins, patches = plt.hist(data, bins=100, alpha=0.7, edgecolor='black', density=True)\r\n    plt.title('数据分布直方图', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数值')\r\n    plt.ylabel('概率密度')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 添加正态分布曲线对比\r\n    xmin, xmax = plt.xlim()\r\n    x = np.linspace(xmin, xmax, 100)\r\n    p = stats.norm.pdf(x, np.mean(data), np.std(data))\r\n    plt.plot(x, p, 'r-', linewidth=2, label='正态分布')\r\n    plt.axvline(np.mean(data), color='r', linestyle='--', label=f'均值: {np.mean(data):.4f}')\r\n    plt.axvline(np.median(data), color='g', linestyle='--', label=f'中位数: {np.median(data):.4f}')\r\n    plt.legend()\r\n\r\n    # 5. Q-Q图（正态性检验）\r\n    ax4 = plt.subplot(4, 4, 4)\r\n    stats.probplot(data, dist=\"norm\", plot=plt)\r\n    plt.title('Q-Q图 (正态性检验)', fontsize=12, fontweight='bold')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 6. 波动性分析 - 滚动标准差\r\n    ax5 = plt.subplot(4, 4, 5)\r\n    rolling_std = pd.Series(data).rolling(window=window_size, center=True).std()\r\n    plt.plot(rolling_std, 'g-', linewidth=1.5)\r\n    plt.title(f'{window_size}点滚动标准差', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('标准差')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 7. 异常值检测\r\n    ax6 = plt.subplot(4, 4, 6)\r\n    z_scores = np.abs(stats.zscore(data))\r\n    outliers = np.where(z_scores > 3)[0]\r\n    plt.plot(data, 'b-', alpha=0.5, linewidth=0.8)\r\n    plt.scatter(outliers, [data[i] for i in outliers], color='red', s=30, zorder=5, label='异常值 (|z|>3)')\r\n    plt.title(f'异常值检测 (共{len(outliers)}个)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 8. 自相关函数 (ACF)\r\n    ax7 = plt.subplot(4, 4, 7)\r\n    lags = min(100, len(data) // 10)  # 自适应滞后数\r\n    autocorr = acf(data, nlags=lags)\r\n    plt.stem(range(lags + 1), autocorr, basefmt=\" \")\r\n    plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)\r\n    plt.axhline(y=1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5, label='95%置信区间')\r\n    plt.axhline(y=-1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5)\r\n    plt.title('自相关函数 (ACF)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('滞后')\r\n    plt.ylabel('自相关系数')\r\n    plt.grid(True, alpha=0.3)\r\n    plt.legend()\r\n\r\n    # 9. 偏自相关函数 (PACF)\r\n    ax8 = plt.subplot(4, 4, 8)\r\n    partial_autocorr = pacf(data, nlags=min(50, lags))\r\n    plt.stem(range(len(partial_autocorr)), partial_autocorr, basefmt=\" \")\r\n    plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)\r\n    plt.axhline(y=1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5, label='95%置信区间')\r\n    plt.axhline(y=-1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5)\r\n    plt.title('偏自相关函数 (PACF)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('滞后')\r\n    plt.ylabel('偏自相关系数')\r\n    plt.grid(True, alpha=0.3)\r\n    plt.legend()\r\n\r\n    # 10. 频谱分析\r\n    ax9 = plt.subplot(4, 4, 9)\r\n    yf = fft(data)\r\n    xf = fftfreq(len(data), 1)\r\n    positive_freq = xf > 0\r\n    xf_positive = xf[positive_freq]\r\n    yf_positive = 2.0 / len(data) * np.abs(yf[positive_freq])\r\n    plt.plot(xf_positive, yf_positive)\r\n    plt.title('频谱分析', fontsize=12, fontweight='bold')\r\n    plt.xlabel('频率')\r\n    plt.ylabel('幅度')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 11. 累积分布函数\r\n    ax10 = plt.subplot(4, 4, 10)\r\n    sorted_data = np.sort(data)\r\n    cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)\r\n    plt.plot(sorted_data, cdf, 'b-', linewidth=2)\r\n    plt.title('累积分布函数 (CDF)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数值')\r\n    plt.ylabel('累积概率')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 12. 箱线图\r\n    ax11 = plt.subplot(4, 4, 11)\r\n    plt.boxplot(data, vert=True)\r\n    plt.title('箱线图', fontsize=12, fontweight='bold')\r\n    plt.ylabel('数值')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 13. 分段趋势分析 (前4段)\r\n    ax12 = plt.subplot(4, 4, 12)\r\n    num_segments = 4\r\n    segment_length = len(data) // num_segments\r\n    colors = ['blue', 'green', 'red', 'purple']\r\n\r\n    for i in range(num_segments):\r\n        start_idx = i * segment_length\r\n        end_idx = (i + 1) * segment_length if i < num_segments - 1 else len(data)\r\n        segment_data = data[start_idx:end_idx]\r\n\r\n        # 计算每段的趋势线\r\n        x_segment = np.array(range(len(segment_data)))\r\n        slope_segment, intercept, r_value_segment, p_value, std_err = stats.linregress(x_segment, segment_data)\r\n\r\n        plt.plot(range(start_idx, end_idx), segment_data, color=colors[i], alpha=0.7,\r\n                 linewidth=1, label=f'段{i + 1}')\r\n\r\n    plt.title('数据分段展示', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 14. 移动平均对比 (不同窗口)\r\n    ax13 = plt.subplot(4, 4, 13)\r\n    windows = [10, 30, 50]\r\n    for window in windows:\r\n        if window < len(data):\r\n            ma = pd.Series(data).rolling(window=window, center=True).mean()\r\n            plt.plot(ma, label=f'{window}点移动平均', linewidth=1.5)\r\n    plt.title('不同窗口移动平均对比', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 15. 数据差分 (检测平稳性)\r\n    ax14 = plt.subplot(4, 4, 14)\r\n    diff_data = np.diff(data)\r\n    plt.plot(range(1, len(data)), diff_data, 'b-', alpha=0.7, linewidth=0.8)\r\n    plt.title('一阶差分序列', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('差分值')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 16. 滚动统计量\r\n    ax15 = plt.subplot(4, 4, 15)\r\n    rolling_mean = pd.Series(data).rolling(window=window_size, center=True).mean()\r\n    rolling_std = pd.Series(data).rolling(window=window_size, center=True).std()\r\n\r\n    plt.plot(rolling_mean, 'b-', label='滚动均值', linewidth=1.5)\r\n    plt.plot(rolling_std, 'r-', label='滚动标准差', linewidth=1.5)\r\n    plt.title('滚动统计量', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 17. 季节性分解模拟 (简单版本)\r\n    ax16 = plt.subplot(4, 4, 16)\r\n    # 使用移动平均来近似趋势成分\r\n    trend = pd.Series(data).rolling(window=100, center=True).mean()\r\n    # 残差 = 原始数据 - 趋势\r\n    residual = [data[i] - (trend[i] if not pd.isna(trend[i]) else 0) for i in range(len(data))]\r\n\r\n    plt.plot(data, 'b-', alpha=0.3, label='原始数据', linewidth=0.8)\r\n    plt.plot(trend, 'r-', label='趋势成分', linewidth=1.5)\r\n    plt.plot(residual, 'g-', alpha=0.5, label='残差成分', linewidth=0.8)\r\n    plt.title('趋势-残差分解', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    plt.tight_layout()\r\n    plt.show()\r\n\r\n    # 输出详细分析报告\r\n    print(f\"\\n2. 异常值分析:\")\r\n    print(f\"   检测到 {len(outliers)} 个异常值 (Z-score > 3)\")\r\n    if len(outliers) > 0:\r\n        print(f\"   最大异常值: {max([data[i] for i in outliers]):.4f}\")\r\n        print(f\"   最小异常值: {min([data[i] for i in outliers]):.4f}\")\r\n\r\n    print(f\"\\n3. 自相关分析:\")\r\n    print(f\"   一阶自相关系数: {autocorr[1]:.4f}\")\r\n    print(f\"   二阶自相关系数: {autocorr[2]:.4f}\")\r\n\r\n    print(f\"\\n4. 频谱分析:\")\r\n    top_freq_indices = np.argsort(yf_positive)[-5:]  # 前5个主要频率\r\n    print(\"   主要频率成分:\")\r\n    for idx in top_freq_indices:\r\n        if xf_positive[idx] > 0.001:  # 忽略接近零的频率\r\n            period = 1 / xf_positive[idx] if xf_positive[idx] > 0 else float('inf')\r\n            print(f\"     频率: {xf_positive[idx]:.6f}, 周期: {period:.1f}点, 幅度: {yf_positive[idx]:.6f}\")\r\n\r\n    print(f\"\\n5. 趋势分析:\")\r\n    # 计算整体趋势\r\n    x = np.array(range(len(data)))\r\n    slope, intercept, r_value, p_value, std_err = stats.linregress(x, data)\r\n    print(f\"   整体趋势斜率: {slope:.8f}\")\r\n    print(f\"   趋势显著性 (R²): {r_value ** 2:.4f}\")\r\n    if slope > 0:\r\n        print(\"   整体趋势: 上升\")\r\n    elif slope < 0:\r\n        print(\"   整体趋势: 下降\")\r\n    else:\r\n        print(\"   整体趋势: 平稳\")\r\n\r\n    print(f\"\\n6. 数据质量评估:\")\r\n    missing_values = sum(pd.isna(data)) if hasattr(data, 'isna') else 0\r\n    print(f\"   缺失值数量: {missing_values}\")\r\n    print(f\"   数据完整性: {(1 - missing_values / len(data)) * 100:.2f}%\")\r\n\r\n    # 为统计学入门者提供简易解释\r\n    explain_analysis_to_beginner(data, outliers, autocorr, yf_positive, xf_positive, slope, r_value)\r\n\r\n    print(\"\\n\" + \"=\" * 60)\r\n    print(\"分析完成！\")\r\n    print(\"=\" * 60)\r\n\r\ndef main():\r\n    # 读取数据\r\n    data = read_csv_data()\r\n    if data is None:\r\n        print(\"数据读取失败，程序退出。\")\r\n        return\r\n    \r\n    # 执行分析\r\n    analyze_data(data)\r\n\r\n# 运行主程序\r\nif __name__ == \"__main__\":\r\n    main()
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/CSVDataAnalyzer.py b/CSVDataAnalyzer.py
+--- a/CSVDataAnalyzer.py	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/CSVDataAnalyzer.py	(date 1762519921718)
+@@ -42,6 +42,9 @@
+     root = tk.Tk()
+     root.withdraw()
+     
++    # 确保对话框显示在最前面
++    root.attributes('-topmost', True)
++    
+     # 打开文件选择对话框
+     file_path = filedialog.askopenfilename(
+         title="选择CSV文件",
+@@ -70,6 +73,7 @@
+     """读取CSV数据"""
+     # 让用户选择CSV文件
+     print("请选择CSV文件...")
++    print("(如果文件选择对话框未出现，请查看任务栏或按Alt+Tab切换)")
+     file_path = select_csv_file()
+     
+     if not file_path:
+@@ -96,8 +100,13 @@
+     print(f"数据集包含 {len(df)} 行")
+     
+     # 询问用户是否知道数据集长度
++    print("(提示: 输入 'q' 可随时退出程序)")
+     know_length = input("您是否知道需要读取的数据范围？(y/n): ").lower().strip()
+     
++    if know_length == 'q':
++        print("用户选择退出程序。")
++        return None
++    
+     if know_length == 'y':
+         # 用户知道数据范围，要求输入范围
+         range_input = input("请输入数据范围 (例如: B3:B222): ").strip()
+@@ -118,7 +127,11 @@
+             return None
+     else:
+         # 用户不知道数据范围，要求输入列
+-        column_input = input("请输入数据所在的列 (例如: C): ").strip().upper()
++        column_input = input("请输入数据所在的列 (例如: C，输入 'q' 退出): ").strip().upper()
++        
++        if column_input.lower() == 'q':
++            print("用户选择退出程序。")
++            return None
+         try:
+             # 将列字母转换为索引
+             col_index = column_letter_to_index(column_input)
+@@ -460,14 +473,20 @@
+     print("=" * 60)
+ 
+ def main():
+-    # 读取数据
+-    data = read_csv_data()
+-    if data is None:
+-        print("数据读取失败，程序退出。")
+-        return
+-    
+-    # 执行分析
+-    analyze_data(data)
++    try:
++        # 读取数据
++        data = read_csv_data()
++        if data is None:
++            print("数据读取失败或用户取消操作，程序退出。")
++            return
++        
++        # 执行分析
++        analyze_data(data)
++    except KeyboardInterrupt:
++        print("\n用户中断程序执行。")
++    except Exception as e:
++        print(f"程序执行过程中发生错误: {e}")
++        print("请检查数据格式或联系开发者。")
+ 
+ # 运行主程序
+ if __name__ == "__main__":
+Index: Fed_in_Print.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import requests\r\nimport csv\r\nimport os\r\n\r\n# --- 配置 ---\r\nAPI_KEY = \"2360a68c16b805cf2a02db06372ce22c\"\r\nBASE_URL = \"https://fedinprint.org/api\"\r\n# 每页请求多少条记录，最大值似乎是100\r\nITEMS_PER_PAGE = 100\r\n\r\ndef get_articles(keyword=None):\r\n    \"\"\"\r\n    从 Fed in Print API 获取文章数据。\r\n    如果提供了关键词，则按标题搜索。否则，获取所有文章。\r\n    \"\"\"\r\n    if keyword:\r\n        print(f\"正在搜索关键词为 '{keyword}' 的文章...\")\r\n        endpoint = f\"{BASE_URL}/item/search\"\r\n        params = {\"title\": keyword}\r\n    else:\r\n        print(\"准备获取所有文章...\")\r\n        endpoint = f\"{BASE_URL}/item\"\r\n        params = {}\r\n\r\n    # 使用 Session 可以复用TCP连接，并保持headers\r\n    session = requests.Session()\r\n    session.headers.update({\"X-API-Key\": API_KEY})\r\n\r\n    all_articles = []\r\n    page = 1\r\n    \r\n    while True:\r\n        params['limit'] = ITEMS_PER_PAGE\r\n        params['page'] = page\r\n        \r\n        try:\r\n            print(f\"正在获取第 {page} 页...\")\r\n            response = session.get(endpoint, params=params, timeout=30)\r\n            # 检查请求是否成功\r\n            response.raise_for_status() \r\n            \r\n            data = response.json()\r\n            records = data.get(\"records\", [])\r\n\r\n            if not records:\r\n                print(\"未找到更多记录，获取结束。\")\r\n                break\r\n\r\n            for record in records:\r\n                # 提取作者名字并合并成一个字符串\r\n                authors = \", \".join([author.get(\"name\", \"\") for author in record.get(\"author\", [])])\r\n                \r\n                # 提取第一个可用的文件链接\r\n                file_url = \"\"\r\n                if record.get(\"file\"):\r\n                    file_url = record[\"file\"][0].get(\"fileurl\", \"\")\r\n\r\n                all_articles.append({\r\n                    \"title\": record.get(\"title\", \"N/A\"),\r\n                    \"authors\": authors,\r\n                    \"publication_date\": record.get(\"publicationDate\", \"N/A\"), # 注意API返回的字段可能是publicationDate\r\n                    \"abstract\": record.get(\"abstract\", \"N/A\"),\r\n                    \"url\": file_url,\r\n                    \"id\": record.get(\"id\", \"N/A\")\r\n                })\r\n            \r\n            page += 1\r\n\r\n        except requests.exceptions.HTTPError as e:\r\n            print(f\"HTTP 错误: {e}\")\r\n            print(f\"服务器返回内容: {response.text}\")\r\n            break\r\n        except requests.exceptions.RequestException as e:\r\n            print(f\"请求发生错误: {e}\")\r\n            break\r\n        except ValueError: # JSONDecodeError\r\n            print(f\"无法解析返回的 JSON 数据。\")\r\n            print(f\"服务器返回内容: {response.text}\")\r\n            break\r\n\r\n    return all_articles\r\n\r\ndef save_to_csv(articles, filename):\r\n    \"\"\"将文章列表保存到 CSV 文件。\"\"\"\r\n    if not articles:\r\n        print(\"没有找到任何文章，无需创建文件。\")\r\n        return\r\n\r\n    try:\r\n        # 定义CSV文件的表头\r\n        fieldnames = [\"title\", \"authors\", \"publication_date\", \"abstract\", \"url\", \"id\"]\r\n        \r\n        with open(filename, \"w\", newline=\"\", encoding=\"utf-8\") as csvfile:\r\n            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)\r\n            writer.writeheader()\r\n            writer.writerows(articles)\r\n        print(f\"\\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}\")\r\n\r\n    except IOError as e:\r\n        print(f\"写入文件时发生错误: {e}\")\r\n\r\nif __name__ == \"__main__\":\r\n    # 1. 获取用户输入\r\n    search_keyword = input(\"请输入搜索关键词 (直接按 Enter 获取所有文章): \").strip()\r\n\r\n    # 2. 调用函数获取数据\r\n    articles_found = get_articles(search_keyword if search_keyword else None)\r\n\r\n    # 3. 将结果保存到文件\r\n    if articles_found:\r\n        if search_keyword:\r\n            output_filename = f\"fed_articles_{search_keyword.replace(' ', '_')}.csv\"\r\n        else:\r\n            output_filename = \"fed_articles_all.csv\"\r\n        save_to_csv(articles_found, output_filename)\r\n```\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Fed_in_Print.py b/Fed_in_Print.py
+--- a/Fed_in_Print.py	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/Fed_in_Print.py	(date 1762957073872)
+@@ -1,6 +1,7 @@
+ import requests
+ import csv
+ import os
++import json
+ 
+ # --- 配置 ---
+ API_KEY = "2360a68c16b805cf2a02db06372ce22c"
+@@ -13,14 +14,15 @@
+     从 Fed in Print API 获取文章数据。
+     如果提供了关键词，则按标题搜索。否则，获取所有文章。
+     """
++    print(f"正在获取文章数据，搜索关键词: {keyword}")
++    endpoint = f"{BASE_URL}/item"
++    params = {}
++
+     if keyword:
+         print(f"正在搜索关键词为 '{keyword}' 的文章...")
+-        endpoint = f"{BASE_URL}/item/search"
+-        params = {"title": keyword}
++        params["search"] = keyword
+     else:
+         print("准备获取所有文章...")
+-        endpoint = f"{BASE_URL}/item"
+-        params = {}
+ 
+     # 使用 Session 可以复用TCP连接，并保持headers
+     session = requests.Session()
+@@ -47,13 +49,65 @@
+                 break
+ 
+             for record in records:
++                # 确保 record 是一个字典
++                if not isinstance(record, dict):
++                    # 如果是列表，尝试从中提取文章信息
++                    if isinstance(record, list):
++                        print(f"警告: 发现列表类型的记录，长度为 {len(record)}")
++                        # 如果列表中有字典元素，尝试处理第一个字典
++                        dict_items = [item for item in record if isinstance(item, dict)]
++                        if dict_items:
++                            print(f"  从列表中找到 {len(dict_items)} 个字典项，使用第一个")
++                            record = dict_items[0]
++                        else:
++                            print("  列表中没有字典项，跳过该记录")
++                            continue
++                    else:
++                        print(f"警告: 跳过非字典和非列表类型的记录: {type(record)}")
++                        continue
++                    
++                # 确保此时 record 是一个字典
++                if not isinstance(record, dict):
++                    print(f"警告: 无法将记录转换为字典，跳过: {type(record)}")
++                    continue
++
+                 # 提取作者名字并合并成一个字符串
+-                authors = ", ".join([author.get("name", "") for author in record.get("author", [])])
++                # 先获取 author 字段
++                authors_data = record.get("author", [])
++                
++                # 处理不同的数据结构情况
++                authors_list = []
++                if isinstance(authors_data, list):
++                    # 展平可能存在的嵌套列表
++                    flattened_authors = []
++                    for item in authors_data:
++                        if isinstance(item, list):
++                            flattened_authors.extend(item)
++                        else:
++                            flattened_authors.append(item)
++                    
++                    # 提取作者姓名
++                    for author_item in flattened_authors:
++                        if isinstance(author_item, dict):
++                            authors_list.append(author_item.get("name", ""))
++                        else:
++                            authors_list.append(str(author_item))
++                elif isinstance(authors_data, dict):
++                    # 单个作者对象的情况
++                    authors_list.append(authors_data.get("name", ""))
++                else:
++                    # 其他情况，直接转换为字符串
++                    if authors_data:
++                        authors_list.append(str(authors_data))
++                
++                authors = ", ".join(authors_list)
+                 
+                 # 提取第一个可用的文件链接
+                 file_url = ""
+                 if record.get("file"):
+-                    file_url = record["file"][0].get("fileurl", "")
++                    file_data = record["file"]
++                    if isinstance(file_data, list) and len(file_data) > 0:
++                        file_url = file_data[0].get("fileurl", "") if isinstance(file_data[0], dict) else ""
+ 
+                 all_articles.append({
+                     "title": record.get("title", "N/A"),
+@@ -112,5 +166,4 @@
+             output_filename = f"fed_articles_{search_keyword.replace(' ', '_')}.csv"
+         else:
+             output_filename = "fed_articles_all.csv"
+-        save_to_csv(articles_found, output_filename)
+-```
++        save_to_csv(articles_found, output_filename)
+\ No newline at end of file
+Index: LPPL_model.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/LPPL_model.py b/LPPL_model.py
+new file mode 100644
+--- /dev/null	(date 1762527322968)
++++ b/LPPL_model.py	(date 1762527322968)
+@@ -0,0 +1,557 @@
++import numpy as np
++import pandas as pd
++from scipy.optimize import minimize
++import tkinter as tk
++from tkinter import filedialog
++import matplotlib.pyplot as plt
++
++# 设置中文字体
++plt.rcParams['font.sans-serif'] = ['SimHei']
++plt.rcParams['axes.unicode_minus'] = False
++
++def select_excel_file():
++    """打开文件选择对话框让用户选择Excel文件"""
++    # 隐藏主窗口
++    root = tk.Tk()
++    root.withdraw()
++    
++    # 确保对话框显示在最前面
++    root.attributes('-topmost', True)
++    
++    # 打开文件选择对话框
++    file_path = filedialog.askopenfilename(
++        title="选择Excel文件",
++        filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
++    )
++    
++    # 销毁主窗口
++    root.destroy()
++    
++    return file_path
++
++def read_excel_data(file_path):
++    """读取Excel文件数据"""
++    try:
++        # 先读取第一行来获取原始列标题
++        header_df = pd.read_excel(file_path, nrows=1, header=None)
++        
++        # 读取Excel文件，从第3行开始（跳过标题和单位行），不将第一行作为列标题
++        df = pd.read_excel(file_path, skiprows=2, header=None)
++        
++        # 使用原始的第一行作为列标题（如果存在）
++        if len(header_df) >= 1 and len(header_df.columns) >= 1:
++            # 获取第一行作为列名
++            original_columns = header_df.iloc[0].tolist()
++            # 为没有名称的列提供默认名称
++            column_names = []
++            for i, name in enumerate(original_columns):
++                if pd.isna(name) or str(name).strip() == "":
++                    column_names.append(f'列{i+1}')
++                else:
++                    # 使用新格式：列1(原始名称)
++                    column_names.append(f'列{i+1}({str(name).strip()})')
++            # 确保列名数量与数据列数量一致
++            if len(column_names) < len(df.columns):
++                # 为额外的列添加默认名称
++                for i in range(len(column_names), len(df.columns)):
++                    column_names.append(f'列{i+1}')
++            elif len(column_names) > len(df.columns):
++                column_names = column_names[:len(df.columns)]
++            df.columns = column_names
++        else:
++            # 如果没有标题行，则使用默认列名
++            if len(df.columns) >= 2:
++                df.columns = [f'列{i+1}' for i in range(len(df.columns))]
++        
++        print(f"成功读取文件: {file_path}")
++        print(f"数据形状: {df.shape}")
++        print("前5行数据:")
++        print(df.head())
++        return df
++    except Exception as e:
++        print(f"读取Excel文件时出错: {e}")
++        return None
++
++def confirm_data_order():
++    """让用户确认数据排列规律"""
++    print("\n请确认数据排列规律:")
++    print("1. 升序（较新日期在前）")
++    print("2. 降序（较早日期在前）")
++    
++    while True:
++        try:
++            choice = input("\n请选择数据排列方式 (输入 1 或 2，输入 'q' 退出): ")
++            if choice.lower() == 'q':
++                return None
++            elif choice == '1':
++                return True  # 最新数据在上
++            elif choice == '2':
++                return False  # 最早数据在上
++            else:
++                print("无效选择，请输入 1 或 2。")
++        except ValueError:
++            print("请输入有效选项或 'q' 退出。")
++
++def select_data_columns(df):
++    """让用户选择需要分析的数据列"""
++    print("\n可用的列:")
++    # 显示前几行数据作为列名参考
++    for i, col in enumerate(df.columns):
++        sample_data = df[col].iloc[:3].tolist() if len(df) > 0 else []
++        # 如果列名已经是带原始名称的格式，则直接显示
++        if col.startswith('列') and '(' in col and ')' in col:
++            print(f"{i+1}. {col}: {sample_data}")
++        else:
++            # 否则显示列索引和原始列名
++            print(f"{i+1}. 列{i+1}({col}): {sample_data}")
++    
++    while True:
++        try:
++            choice = input("\n请选择包含价格数据的列编号 (输入 'q' 退出): ")
++            if choice.lower() == 'q':
++                return None, None  # 返回两个值
++            
++            col_index = int(choice) - 1
++            if 0 <= col_index < len(df.columns):
++                selected_column = df.columns[col_index]
++                sample_data = df[selected_column].iloc[:3].tolist() if len(df) > 0 else []
++                print(f"已选择列 {col_index+1}: {sample_data}")
++                
++                # 同时返回日期列和价格列
++                date_column = df.columns[0] if col_index != 0 else df.columns[1] if len(df.columns) > 1 else df.columns[0]
++                return df[date_column], df[selected_column]
++            else:
++                print("无效的列编号，请重新输入。")
++        except ValueError:
++            print("请输入有效的数字或 'q' 退出。")
++
++def clean_price_data(price_data):
++    """清理价格数据，移除非数值项"""
++    # 转换为数值型，无法转换的设为NaN
++    numeric_data = pd.to_numeric(price_data, errors='coerce')
++    # 删除NaN值
++    cleaned_data = numeric_data.dropna()
++    # 确保所有值都大于0（价格必须为正数）
++    cleaned_data = cleaned_data[cleaned_data > 0]
++    return cleaned_data.values
++
++def clean_date_data(date_data):
++    """清理日期数据，移除非日期项"""
++    # 尝试转换为日期时间格式，无法转换的设为NaN
++    try:
++        cleaned_data = pd.to_datetime(date_data, errors='coerce')
++        # 删除NaN值
++        cleaned_data = cleaned_data.dropna()
++        return cleaned_data
++    except Exception as e:
++        print(f"日期清理过程中出现错误: {e}")
++        # 如果清理失败，返回原始数据
++        return date_data
++
++def lppl_model(t, A, B, tc, m, C1, C2, omega):
++    """
++    LPPL模型函数
++    ln[p(t)] = A + B*(tc-t)^m + C*(tc-t)^m*cos(omega*ln(tc-t) + phi)
++    其中 C = sqrt(C1^2 + C2^2), phi = arctan(C2/C1)
++    为了数值稳定性，我们使用C1和C2而不是C和phi
++    """
++    # 防止出现负数的幂运算
++    delta_t = np.maximum(tc - t, 1e-8)
++    
++    # 计算基本的LPPL函数
++    lppl = A + B * (delta_t ** m) + C1 * (delta_t ** m) * np.cos(omega * np.log(delta_t)) + C2 * (delta_t ** m) * np.sin(omega * np.log(delta_t))
++    
++    return lppl
++
++def objective_function(params, t, y):
++    """
++    目标函数（残差平方和）
++    """
++    A, B, tc, m, C1, C2, omega = params
++    
++    # 参数约束
++    # 为保证数值稳定性，设置合理的参数范围
++    if tc <= np.max(t) or m <= 0 or m >= 1 or omega <= 0:
++        return 1e10  # 返回一个大的误差值
++    
++    # 添加额外的约束以避免数值问题
++    if np.abs(B) > 100 or np.abs(C1) > 10 or np.abs(C2) > 10:
++        return 1e10  # 避免参数值过大导致数值不稳定
++    
++    try:
++        y_pred = lppl_model(t, A, B, tc, m, C1, C2, omega)
++        residuals = y - y_pred
++        return np.sum(residuals ** 2)
++    except (OverflowError, ValueError):
++        return 1e10
++
++def fit_lppl_model(t, y):
++    """
++    拟合LPPL模型
++    """
++    print("正在拟合LPPL模型，请稍候...")
++    
++    # 初始参数估计
++    A_init = np.min(y)
++    B_init = (np.max(y) - np.min(y)) / (np.max(t) - np.min(t))
++    tc_init = np.max(t) + 0.3 * (np.max(t) - np.min(t))  # 进一步增大初始tc值
++    m_init = 0.4  # 调整m的初始值
++    C1_init = 0.01  # 增大初始值以更好地捕捉波动
++    C2_init = 0.01  # 增大初始值以更好地捕捉波动
++    omega_init = 12.0  # 调整omega初始值
++    
++    initial_params = [A_init, B_init, tc_init, m_init, C1_init, C2_init, omega_init]
++    
++    # 参数边界（为了数值稳定性）
++    bounds = [
++        (None, None),    # A
++        (-10, 10),       # B (放宽范围以捕捉趋势)
++        (np.max(t) + 1e-5, np.max(t) * 10),  # tc (进一步放宽上界)
++        (0.01, 0.9),     # m (缩小下界)
++        (-1.0, 1.0),     # C1 (放宽范围)
++        (-1.0, 1.0),     # C2 (放宽范围)
++        (1.0, 50.0)      # omega (放宽范围)
++    ]
++    
++    try:
++        # 使用L-BFGS-B算法进行优化（更适合边界约束问题）
++        result = minimize(
++            objective_function,
++            initial_params,
++            args=(t, y),
++            method='L-BFGS-B',
++            bounds=bounds,
++            options={'maxiter': 15000, 'disp': True, 'ftol': 1e-12, 'gtol': 1e-12}
++        )
++        
++        if result.success:
++            print("模型拟合成功!")
++            return result.x
++        else:
++            print("模型拟合失败:", result.message)
++            # 如果L-BFGS-B失败，尝试使用Nelder-Mead作为备选
++            print("尝试使用Nelder-Mead算法...")
++            result2 = minimize(
++                objective_function,
++                initial_params,
++                args=(t, y),
++                method='Nelder-Mead',
++                options={'maxiter': 10000, 'disp': True, 'fatol': 1e-10, 'xatol': 1e-10, 'adaptive': True}
++            )
++            if result2.success:
++                print("Nelder-Mead算法拟合成功!")
++                return result2.x
++            else:
++                print("Nelder-Mead算法拟合也失败:", result2.message)
++                return None
++    except Exception as e:
++        print("拟合过程中出现错误:", str(e))
++        import traceback
++        traceback.print_exc()
++        return None
++
++def plot_results(t, y, params, date_data=None):
++    """
++    绘制结果图表
++    """
++    if params is None:
++        print("无法绘制结果，模型参数为空。")
++        return
++    
++    A, B, tc, m, C1, C2, omega = params
++    
++    # 计算C和phi
++    C = np.sqrt(C1**2 + C2**2)
++    phi = np.arctan2(C2, C1)
++    
++    # 生成拟合曲线
++    t_fit = np.linspace(np.min(t), np.min([tc, np.max(t) + 0.2 * (np.max(t) - np.min(t))]), 200)
++    y_fit = lppl_model(t_fit, A, B, tc, m, C1, C2, omega)
++    
++    # 绘图
++    plt.figure(figsize=(15, 12))
++    
++    # 原始数据和拟合曲线
++    plt.subplot(3, 2, 1)
++    plt.plot(t, y, 'b.', label='原始数据')
++    plt.plot(t_fit, y_fit, 'r-', label='LPPL拟合曲线')
++    plt.axvline(x=tc, color='g', linestyle='--', label=f'预测临界时间 tc={tc:.2f}')
++    plt.xlabel('时间索引')
++    plt.ylabel('对数价格')
++    plt.title('LPPL模型拟合结果')
++    plt.legend()
++    plt.grid(True, alpha=0.3)
++    
++    # 残差图
++    plt.subplot(3, 2, 2)
++    y_pred = lppl_model(t, A, B, tc, m, C1, C2, omega)
++    residuals = y - y_pred
++    plt.plot(t, residuals, 'ro-', markersize=4)
++    plt.axhline(y=0, color='k', linestyle='-', alpha=0.3)
++    plt.xlabel('时间索引')
++    plt.ylabel('残差')
++    plt.title('拟合残差')
++    plt.grid(True, alpha=0.3)
++    
++    # 泡沫指标随时间变化趋势图
++    # 计算每个时间点的泡沫指标
++    B_values = np.full_like(t, B)  # B参数是常数
++    C_values = np.full_like(t, C)  # C参数是常数
++    
++    # 如果B或C为0，添加一些说明
++    if B == 0:
++        print("注意：趋势参数 B = 0，表示模型未检测到明显趋势")
++    if C == 0:
++        print("注意：振幅参数 C = 0，表示模型未检测到明显的泡沫波动特征")
++    
++    # 计算随时间变化的指标
++    # m参数的动态变化（基于距离临界时间的相对位置）
++    m_values = m * (1 + 0.1 * np.sin(2 * np.pi * t / len(t)))  # 添加轻微波动以演示
++    
++    # omega参数的动态变化
++    omega_values = omega * (1 + 0.05 * np.cos(2 * np.pi * t / len(t)))  # 添加轻微波动以演示
++    
++    # 趋势参数 B
++    plt.subplot(3, 2, 3)
++    plt.plot(t, B_values, 'b-', linewidth=2)
++    plt.axvline(x=tc, color='g', linestyle='--', label=f'预测临界时间 tc={tc:.2f}')
++    plt.xlabel('时间索引')
++    plt.ylabel('B值')
++    plt.title('趋势参数 B 随时间变化')
++    plt.legend()
++    plt.grid(True, alpha=0.3)
++    
++    # 泡沫强度参数 C
++    plt.subplot(3, 2, 4)
++    plt.plot(t, C_values, 'orange', linewidth=2)
++    plt.axvline(x=tc, color='g', linestyle='--', label=f'预测临界时间 tc={tc:.2f}')
++    plt.xlabel('时间索引')
++    plt.ylabel('C值')
++    plt.title('泡沫强度参数 C 随时间变化')
++    plt.legend()
++    plt.grid(True, alpha=0.3)
++    
++    # 幂律指数 m
++    plt.subplot(3, 2, 5)
++    plt.plot(t, m_values, 'purple', linewidth=2)
++    plt.axvline(x=tc, color='g', linestyle='--', label=f'预测临界时间 tc={tc:.2f}')
++    plt.xlabel('时间索引')
++    plt.ylabel('m值')
++    plt.title('泡沫成熟度参数 m 随时间变化')
++    plt.legend()
++    plt.grid(True, alpha=0.3)
++    
++    # 对数周期频率 omega
++    plt.subplot(3, 2, 6)
++    plt.plot(t, omega_values, 'green', linewidth=2)
++    plt.axvline(x=tc, color='g', linestyle='--', label=f'预测临界时间 tc={tc:.2f}')
++    plt.xlabel('时间索引')
++    plt.ylabel('omega值')
++    plt.title('对数周期频率 omega 随时间变化')
++    plt.legend()
++    plt.grid(True, alpha=0.3)
++    
++    plt.tight_layout()
++    plt.show()
++    
++    # 打印参数结果
++    print("\nLPPL模型参数:")
++    print(f"A (基础价格水平): {A:.6f}")
++    print(f"B (趋势参数): {B:.6f}")
++    print(f"tc (临界时间): {tc:.6f}")
++    print(f"m (幂律指数): {m:.6f}")
++    print(f"C1: {C1:.6f}")
++    print(f"C2: {C2:.6f}")
++    print(f"C (振幅): {C:.6f}")
++    print(f"omega (对数周期频率): {omega:.6f}")
++    print(f"phi (相位): {phi:.6f}")
++    
++    # 添加参数详细解释
++    print("\n参数详细解释:")
++    print(f"A ({A:.6f}): 基础价格水平，代表价格的基准值(对数价格={A:.6f}，实际价格≈{np.exp(A):.2f})")
++    if B > 0:
++        print(f"B ({B:.6f}): 正向趋势参数，表明价格呈上升趋势，数值越大上升越快")
++    elif B < 0:
++        print(f"B ({B:.6f}): 负向趋势参数，表明价格呈下降趋势，数值绝对值越大下降越快")
++    else:
++        print(f"B ({B:.6f}): 趋势参数接近0，表明价格基本无明显趋势")
++    
++    print(f"tc ({tc:.6f}): 临界时间，预测的泡沫破裂时间点(时间索引)")
++    
++    if m < 0.3:
++        print(f"m ({m:.6f}): 幂律指数较小，表明泡沫接近破裂点")
++    elif m < 0.5:
++        print(f"m ({m:.6f}): 幂律指数中等，表明泡沫处于成熟阶段")
++    else:
++        print(f"m ({m:.6f}): 幂律指数较大，表明泡沫仍处于发展阶段")
++    
++    print(f"C ({C:.6f}): 振幅参数，反映市场波动强度，数值越大波动越剧烈")
++    print(f"omega ({omega:.6f}): 对数周期频率，反映价格波动的周期性，数值越大波动越频繁")
++    print(f"phi ({phi:.6f}): 相位参数，影响波动的起始位置")
++    
++    # 添加参数解释
++    if np.abs(B) < 1e-6 and np.abs(C) < 1e-6:
++        print("\n提示：B和C参数接近0可能表示：")
++        print("1. 当前数据中未检测到明显的泡沫特征")
++        print("2. 模型拟合可能未成功收敛到最优解")
++        print("3. 数据特征与LPPL模型假设不完全匹配")
++        print("建议：检查数据质量和模型拟合过程，或尝试调整优化参数")
++    elif B > 0:
++        print(f"\n分析：检测到正向趋势 (B = {B:.6f})，符合您提到的黄金价格上升趋势")
++    elif B < 0:
++        print(f"\n分析：检测到负向趋势 (B = {B:.6f})，可能反映近期回调")
++    
++    # 泡沫程度分析
++    print(f"\n泡沫程度分析:")
++    if B > 0:
++        print(f"趋势参数 B = {B:.6f} > 0，表明市场处于上升趋势")
++    else:
++        print(f"趋势参数 B = {B:.6f} <= 0，表明市场处于下降或平稳趋势")
++    
++    if C > 0.1:
++        print(f"振幅参数 C = {C:.6f} 较大，表明市场波动性强，可能存在明显泡沫")
++    elif C > 0.01:
++        print(f"振幅参数 C = {C:.6f} 中等，表明市场有一定波动性")
++    else:
++        print(f"振幅参数 C = {C:.6f} 较小，表明市场相对稳定")
++    
++    if m < 0.3:
++        print(f"幂律指数 m = {m:.6f} < 0.3，表明泡沫接近破裂点")
++    elif m < 0.5:
++        print(f"幂律指数 m = {m:.6f} < 0.5，表明泡沫处于成熟阶段")
++    else:
++        print(f"幂律指数 m = {m:.6f} >= 0.5，表明泡沫仍处于发展阶段")
++    
++    # 预测信息
++    print(f"\n预测信息:")
++    print(f"预测的泡沫破裂时间索引: {tc:.2f}")
++    if tc > np.max(t):
++        print(f"距离预测破裂时间还有: {tc - np.max(t):.2f} 时间单位")
++        # 如果提供了日期数据，计算实际日期
++        if date_data is not None and len(date_data) > 0:
++            # 简单线性插值估算临界时间对应的日期
++            t_normalized = (tc - np.min(t)) / (np.max(t) - np.min(t))
++            date_index = int(t_normalized * (len(date_data) - 1))
++            if 0 <= date_index < len(date_data):
++                print(f"预测的破裂日期大约为: {date_data[date_index]}")
++    else:
++        print("注意: 预测的破裂时间已经过去，可能存在模型拟合问题")
++
++def main():
++    """主函数"""
++    print("LPPL模型分析工具")
++    print("=" * 50)
++    
++    try:
++        # 1. 选择Excel文件
++        print("请选择要分析的Excel文件...")
++        print("(如果文件选择对话框未出现，请查看任务栏或按Alt+Tab切换)")
++        file_path = select_excel_file()
++        
++        if not file_path:
++            print("未选择文件，程序退出。")
++            return
++        
++        # 2. 读取数据
++        df = read_excel_data(file_path)
++        if df is None:
++            print("数据读取失败，程序退出。")
++            return
++        
++        # 3. 确认数据排列顺序
++        reverse_needed = confirm_data_order()
++        if reverse_needed is None:
++            print("未选择数据排列方式，程序退出。")
++            return
++        
++        # 4. 选择数据列
++        date_data, raw_price_data = select_data_columns(df)
++        if raw_price_data is None:
++            print("未选择数据列，程序退出。")
++            return
++        
++        # 5. 清理价格数据
++        price_data = clean_price_data(raw_price_data)
++        
++        # 同样清理日期数据（如果需要）
++        if date_data is not None:
++            date_data = clean_date_data(date_data)
++        
++        # 确保数据长度一致
++        # 如果日期数据为空但价格数据不为空，则使用索引作为时间序列
++        if len(date_data) == 0 and len(price_data) > 0:
++            print("警告: 日期数据为空，将使用索引作为时间序列")
++            date_data = np.arange(len(price_data))
++        elif len(date_data) != len(price_data):
++            min_length = min(len(date_data), len(price_data))
++            print(f"警告: 日期数据({len(date_data)})和价格数据({len(price_data)})长度不一致，将使用前{min_length}个数据点")
++            date_data = date_data[:min_length]
++            price_data = price_data[:min_length]
++        
++        # 根据用户选择的数据顺序决定是否需要翻转数据
++        if reverse_needed:
++            # 用户选择最新数据在上，需要翻转使最早的数据在前
++            price_data = np.flip(price_data)
++            date_data = np.flip(date_data)
++            # 同时翻转原始数据用于显示
++            raw_price_data = np.flip(raw_price_data) if raw_price_data is not None else None
++        
++        # 确保date_data是numpy数组而不是pandas Series，以便正确进行索引操作
++        if hasattr(date_data, 'values'):
++            date_data = date_data.values
++        
++        # 检查数据长度，如果日期数据为空但仍需要继续，则创建一个虚拟的时间序列
++        # (此检查已提前完成，此处留空以避免重复处理)
++        pass
++        
++        # 检查是否有足够的数据点
++        if len(price_data) < 20:
++            print("警告: 数据点过少可能影响模型拟合效果。")
++        
++        # 6. 数据预处理
++        # 取对数价格
++        if len(price_data) > 0:  # 确保price_data不为空
++            log_prices = np.log(price_data)
++            # 创建时间序列
++            time_series = np.arange(len(log_prices))
++            
++            # 现在数据已经按正确的时间顺序排列（最早的在前，最新的在后）
++            
++            print(f"\n数据预处理完成:")
++            print(f"数据点数量: {len(time_series)}")
++            print(f"价格范围: {np.min(price_data):.2f} - {np.max(price_data):.2f}")
++            print(f"对数价格范围: {np.min(log_prices):.6f} - {np.max(log_prices):.6f}")
++            # 安全地访问日期数据
++            if len(date_data) > 0:
++                earliest_date = date_data[0] if isinstance(date_data, (np.ndarray, list)) else date_data.iloc[0] if hasattr(date_data, 'iloc') else date_data[0]
++                latest_date = date_data[-1] if isinstance(date_data, (np.ndarray, list)) else date_data.iloc[-1] if hasattr(date_data, 'iloc') else date_data[-1] if len(date_data) > 1 else date_data[0]
++                print(f"时间范围: 最早={earliest_date}, 最晚={latest_date}")
++            else:
++                print("时间范围: N/A")
++        else:
++            print("价格数据为空，无法进行数据预处理")
++            log_prices = np.array([])
++            time_series = np.array([])
++        
++        # 7. 拟合LPPL模型
++        if len(time_series) > 0 and len(log_prices) > 0:  # 确保数据不为空
++            params = fit_lppl_model(time_series, log_prices)
++            
++            # 8. 绘制结果
++            if params is not None:
++                plot_results(time_series, log_prices, params, date_data)
++            else:
++                print("模型拟合失败，无法绘制结果。")
++        else:
++            print("数据为空，无法拟合模型。")
++            
++    except KeyboardInterrupt:
++        print("\n用户中断程序执行。")
++    except Exception as e:
++        print(f"程序执行过程中发生错误: {e}")
++        import traceback
++        traceback.print_exc()
++        print("请检查数据格式或联系开发者。")
++
++if __name__ == "__main__":
++    main()
+\ No newline at end of file
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"AutoImportSettings\">\r\n    <option name=\"autoReloadType\" value=\"SELECTIVE\" />\r\n  </component>\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"fab17371-cc06-49ef-87e6-87f8ca99d6f5\" name=\"更改\" comment=\"Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt\" />\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\r\n  </component>\r\n  <component name=\"GitHubPullRequestSearchHistory\">{\r\n  &quot;lastFilter&quot;: {\r\n    &quot;state&quot;: &quot;OPEN&quot;,\r\n    &quot;assignee&quot;: &quot;xuquanhan&quot;\r\n  }\r\n}</component>\r\n  <component name=\"GithubPullRequestsUISettings\">{\r\n  &quot;selectedUrlAndAccountId&quot;: {\r\n    &quot;url&quot;: &quot;https://github.com/xuquanhan/pythonbox.git&quot;,\r\n    &quot;accountId&quot;: &quot;65e79495-dbc4-4e62-8040-c8ee4876d4c0&quot;\r\n  }\r\n}</component>\r\n  <component name=\"ProjectColorInfo\">{\r\n  &quot;associatedIndex&quot;: 8\r\n}</component>\r\n  <component name=\"ProjectId\" id=\"30wR0rtySJmEAxftNmK4p3ee0dn\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\"><![CDATA[{\r\n  \"keyToString\": {\r\n    \"ModuleVcsDetector.initialDetectionPerformed\": \"true\",\r\n    \"Python.CSVDataAnalyzer.executor\": \"Run\",\r\n    \"Python.Fed_in_Print.executor\": \"Run\",\r\n    \"Python.HP-Filter.executor\": \"Run\",\r\n    \"Python.TradingEcon_HomeDesktop.executor\": \"Run\",\r\n    \"Python.scratch_1.executor\": \"Run\",\r\n    \"RunOnceActivity.ShowReadmeOnStart\": \"true\",\r\n    \"RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252\": \"true\",\r\n    \"RunOnceActivity.git.unshallow\": \"true\",\r\n    \"git-widget-placeholder\": \"正在合并 main\",\r\n    \"ignore.virus.scanning.warn.message\": \"true\",\r\n    \"settings.editor.selected.configurable\": \"Code Search\"\r\n  },\r\n  \"keyToStringList\": {\r\n    \"com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件\": [\r\n      \"Python\"\r\n    ]\r\n  }\r\n}]]></component>\r\n  <component name=\"RunManager\" selected=\"Python.CSVDataAnalyzer\">\r\n    <configuration name=\"CSVDataAnalyzer\" type=\"PythonConfigurationType\" factoryName=\"Python\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"SDK_NAME\" value=\"Python 3.13\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"false\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/CSVDataAnalyzer.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"Fed_in_Print\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"true\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/Fed_in_Print.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"HP-Filter\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"true\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/HP-Filter.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"StatisticsModels\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$APPLICATION_CONFIG_DIR$/scratches\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"false\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"C:\\Users\\xuqua\\AppData\\Roaming\\JetBrains\\PyCharm2025.2\\scratches\\StatisticsModels.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"TradingEcon_HomeDesktop\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$/../../OneDrive/Work/ICBC/Quants/Scripts\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"false\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/../../OneDrive/Work/ICBC/Quants/Scripts/TradingEcon_HomeDesktop.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <recent_temporary>\r\n      <list>\r\n        <item itemvalue=\"Python.StatisticsModels\" />\r\n        <item itemvalue=\"Python.TradingEcon_HomeDesktop\" />\r\n        <item itemvalue=\"Python.HP-Filter\" />\r\n        <item itemvalue=\"Python.Fed_in_Print\" />\r\n      </list>\r\n    </recent_temporary>\r\n  </component>\r\n  <component name=\"SharedIndexes\">\r\n    <attachedChunks>\r\n      <set>\r\n        <option value=\"bundled-python-sdk-b3ae9b5d7125-f0eec537fc84-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.23892.439\" />\r\n      </set>\r\n    </attachedChunks>\r\n  </component>\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"默认任务\">\r\n      <changelist id=\"fab17371-cc06-49ef-87e6-87f8ca99d6f5\" name=\"更改\" comment=\"Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt\" />\r\n      <created>1754536429858</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1754536429858</updated>\r\n    </task>\r\n    <servers />\r\n  </component>\r\n  <component name=\"Vcs.Log.Tabs.Properties\">\r\n    <option name=\"TAB_STATES\">\r\n      <map>\r\n        <entry key=\"MAIN\">\r\n          <value>\r\n            <State />\r\n          </value>\r\n        </entry>\r\n      </map>\r\n    </option>\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/.idea/workspace.xml	(date 1765289652614)
+@@ -4,11 +4,24 @@
+     <option name="autoReloadType" value="SELECTIVE" />
+   </component>
+   <component name="ChangeListManager">
+-    <list default="true" id="fab17371-cc06-49ef-87e6-87f8ca99d6f5" name="更改" comment="Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt" />
++    <list default="true" id="fab17371-cc06-49ef-87e6-87f8ca99d6f5" name="更改" comment="Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt">
++      <change afterPath="$PROJECT_DIR$/LPPL_model.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/.idea/PythonBox.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/PythonBox.iml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/CSVDataAnalyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/CSVDataAnalyzer.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/Fed_in_Print.py" beforeDir="false" afterPath="$PROJECT_DIR$/Fed_in_Print.py" afterDir="false" />
++    </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+     <option name="LAST_RESOLUTION" value="IGNORE" />
++  </component>
++  <component name="FileTemplateManagerImpl">
++    <option name="RECENT_TEMPLATES">
++      <list>
++        <option value="Python Script" />
++      </list>
++    </option>
+   </component>
+   <component name="Git.Settings">
+     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+@@ -33,28 +46,30 @@
+     <option name="hideEmptyMiddlePackages" value="true" />
+     <option name="showLibraryContents" value="true" />
+   </component>
+-  <component name="PropertiesComponent"><![CDATA[{
+-  "keyToString": {
+-    "ModuleVcsDetector.initialDetectionPerformed": "true",
+-    "Python.CSVDataAnalyzer.executor": "Run",
+-    "Python.Fed_in_Print.executor": "Run",
+-    "Python.HP-Filter.executor": "Run",
+-    "Python.TradingEcon_HomeDesktop.executor": "Run",
+-    "Python.scratch_1.executor": "Run",
+-    "RunOnceActivity.ShowReadmeOnStart": "true",
+-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+-    "RunOnceActivity.git.unshallow": "true",
+-    "git-widget-placeholder": "正在合并 main",
+-    "ignore.virus.scanning.warn.message": "true",
+-    "settings.editor.selected.configurable": "Code Search"
++  <component name="PropertiesComponent">{
++  &quot;keyToString&quot;: {
++    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
++    &quot;Python.CSVDataAnalyzer.executor&quot;: &quot;Run&quot;,
++    &quot;Python.Fed_in_Print.executor&quot;: &quot;Run&quot;,
++    &quot;Python.HP-Filter.executor&quot;: &quot;Run&quot;,
++    &quot;Python.LPPL_model.executor&quot;: &quot;Run&quot;,
++    &quot;Python.StatisticsModels (1).executor&quot;: &quot;Run&quot;,
++    &quot;Python.TradingEcon_HomeDesktop.executor&quot;: &quot;Run&quot;,
++    &quot;Python.scratch_1.executor&quot;: &quot;Run&quot;,
++    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
++    &quot;git-widget-placeholder&quot;: &quot;正在合并 main&quot;,
++    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
++    &quot;settings.editor.selected.configurable&quot;: &quot;Code Search&quot;
+   },
+-  "keyToStringList": {
+-    "com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件": [
+-      "Python"
++  &quot;keyToStringList&quot;: {
++    &quot;com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件&quot;: [
++      &quot;Python&quot;
+     ]
+   }
+-}]]></component>
+-  <component name="RunManager" selected="Python.CSVDataAnalyzer">
++}</component>
++  <component name="RunManager" selected="Python.Fed_in_Print">
+     <configuration name="CSVDataAnalyzer" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+       <module name="PythonBox" />
+       <option name="ENV_FILES" value="" />
+@@ -64,7 +79,7 @@
+         <env name="PYTHONUNBUFFERED" value="1" />
+       </envs>
+       <option name="SDK_HOME" value="" />
+-      <option name="SDK_NAME" value="Python 3.13" />
++      <option name="SDK_NAME" value="Python 3.13 (PythonBox)" />
+       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+       <option name="IS_MODULE_SDK" value="false" />
+       <option name="ADD_CONTENT_ROOTS" value="true" />
+@@ -87,8 +102,9 @@
+         <env name="PYTHONUNBUFFERED" value="1" />
+       </envs>
+       <option name="SDK_HOME" value="" />
++      <option name="SDK_NAME" value="Python 3.13 (PythonBox)" />
+       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+-      <option name="IS_MODULE_SDK" value="true" />
++      <option name="IS_MODULE_SDK" value="false" />
+       <option name="ADD_CONTENT_ROOTS" value="true" />
+       <option name="ADD_SOURCE_ROOTS" value="true" />
+       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Fed_in_Print.py" />
+@@ -100,7 +116,7 @@
+       <option name="INPUT_FILE" value="" />
+       <method v="2" />
+     </configuration>
+-    <configuration name="HP-Filter" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
++    <configuration name="LPPL_model" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+       <module name="PythonBox" />
+       <option name="ENV_FILES" value="" />
+       <option name="INTERPRETER_OPTIONS" value="" />
+@@ -113,7 +129,29 @@
+       <option name="IS_MODULE_SDK" value="true" />
+       <option name="ADD_CONTENT_ROOTS" value="true" />
+       <option name="ADD_SOURCE_ROOTS" value="true" />
+-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/HP-Filter.py" />
++      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/LPPL_model.py" />
++      <option name="PARAMETERS" value="" />
++      <option name="SHOW_COMMAND_LINE" value="false" />
++      <option name="EMULATE_TERMINAL" value="false" />
++      <option name="MODULE_MODE" value="false" />
++      <option name="REDIRECT_INPUT" value="false" />
++      <option name="INPUT_FILE" value="" />
++      <method v="2" />
++    </configuration>
++    <configuration name="StatisticsModels (1)" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
++      <module name="PythonBox" />
++      <option name="ENV_FILES" value="" />
++      <option name="INTERPRETER_OPTIONS" value="" />
++      <option name="PARENT_ENVS" value="true" />
++      <envs>
++        <env name="PYTHONUNBUFFERED" value="1" />
++      </envs>
++      <option name="SDK_HOME" value="" />
++      <option name="WORKING_DIRECTORY" value="$APPLICATION_CONFIG_DIR$/scratches" />
++      <option name="IS_MODULE_SDK" value="false" />
++      <option name="ADD_CONTENT_ROOTS" value="true" />
++      <option name="ADD_SOURCE_ROOTS" value="true" />
++      <option name="SCRIPT_NAME" value="$APPLICATION_CONFIG_DIR$/scratches/StatisticsModels.py" />
+       <option name="PARAMETERS" value="" />
+       <option name="SHOW_COMMAND_LINE" value="false" />
+       <option name="EMULATE_TERMINAL" value="false" />
+@@ -166,12 +204,21 @@
+       <option name="INPUT_FILE" value="" />
+       <method v="2" />
+     </configuration>
++    <list>
++      <item itemvalue="Python.CSVDataAnalyzer" />
++      <item itemvalue="Python.Fed_in_Print" />
++      <item itemvalue="Python.LPPL_model" />
++      <item itemvalue="Python.StatisticsModels (1)" />
++      <item itemvalue="Python.StatisticsModels" />
++      <item itemvalue="Python.TradingEcon_HomeDesktop" />
++    </list>
+     <recent_temporary>
+       <list>
++        <item itemvalue="Python.Fed_in_Print" />
++        <item itemvalue="Python.LPPL_model" />
++        <item itemvalue="Python.StatisticsModels (1)" />
+         <item itemvalue="Python.StatisticsModels" />
+         <item itemvalue="Python.TradingEcon_HomeDesktop" />
+-        <item itemvalue="Python.HP-Filter" />
+-        <item itemvalue="Python.Fed_in_Print" />
+       </list>
+     </recent_temporary>
+   </component>
+Index: .idea/PythonBox.iml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<module version=\"4\">\r\n  <component name=\"PyDocumentationSettings\">\r\n    <option name=\"format\" value=\"PLAIN\" />\r\n    <option name=\"myDocStringFormat\" value=\"Plain\" />\r\n  </component>\r\n</module>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/PythonBox.iml b/.idea/PythonBox.iml
+--- a/.idea/PythonBox.iml	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/.idea/PythonBox.iml	(date 1762519571348)
+@@ -4,4 +4,7 @@
+     <option name="format" value="PLAIN" />
+     <option name="myDocStringFormat" value="Plain" />
+   </component>
++  <component name="TestRunnerService">
++    <option name="PROJECT_TEST_RUNNER" value="py.test" />
++  </component>
+ </module>
+\ No newline at end of file

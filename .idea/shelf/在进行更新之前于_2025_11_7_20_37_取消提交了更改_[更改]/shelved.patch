@@ -1,0 +1,510 @@
+Index: CSVDataAnalyzer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import matplotlib.pyplot as plt\r\nimport numpy as np\r\nimport pandas as pd\r\nfrom scipy import stats\r\nfrom statsmodels.tsa.stattools import acf, pacf\r\nfrom scipy.fft import fft, fftfreq\r\nimport tkinter as tk\r\nfrom tkinter import filedialog\r\nimport string\r\n\r\n# 设置中文字体\r\nplt.rcParams['font.sans-serif'] = ['SimHei']\r\nplt.rcParams['axes.unicode_minus'] = False\r\n\r\ndef column_letter_to_index(letter):\r\n    \"\"\"将Excel列字母转换为数字索引 (例如: A->0, B->1, AA->26)\"\"\"\r\n    letter = letter.upper()\r\n    result = 0\r\n    for char in letter:\r\n        result = result * 26 + (ord(char) - ord('A') + 1)\r\n    return result - 1  # 转换为0基索引\r\n\r\ndef parse_range_input(range_str):\r\n    \"\"\"解析范围输入，例如 \"B3:B222\" \"\"\"\r\n    parts = range_str.split(':')\r\n    if len(parts) != 2:\r\n        raise ValueError(\"范围格式不正确，请使用例如 'B3:B222' 的格式\")\r\n    \r\n    start_part = parts[0].strip()\r\n    end_part = parts[1].strip()\r\n    \r\n    # 提取列和行信息\r\n    start_col = ''.join([c for c in start_part if c.isalpha()]).upper()\r\n    start_row = int(''.join([c for c in start_part if c.isdigit()]))\r\n    end_row = int(''.join([c for c in end_part if c.isdigit()]))\r\n    \r\n    return start_col, start_row, end_row\r\n\r\ndef select_csv_file():\r\n    \"\"\"打开文件选择对话框让用户选择CSV文件\"\"\"\r\n    # 隐藏主窗口\r\n    root = tk.Tk()\r\n    root.withdraw()\r\n    \r\n    # 打开文件选择对话框\r\n    file_path = filedialog.askopenfilename(\r\n        title=\"选择CSV文件\",\r\n        filetypes=[(\"CSV files\", \"*.csv\"), (\"All files\", \"*.*\")]\r\n    )\r\n    \r\n    # 销毁主窗口\r\n    root.destroy()\r\n    \r\n    return file_path\r\n\r\ndef convert_to_numeric(data):\r\n    \"\"\"将数据转换为数值类型\"\"\"\r\n    numeric_data = []\r\n    for item in data:\r\n        try:\r\n            # 尝试转换为浮点数\r\n            numeric_data.append(float(item))\r\n        except (ValueError, TypeError):\r\n            # 如果转换失败，跳过该项\r\n            print(f\"警告: 无法将 '{item}' 转换为数值，已跳过\")\r\n            continue\r\n    return numeric_data\r\n\r\ndef read_csv_data():\r\n    \"\"\"读取CSV数据\"\"\"\r\n    # 让用户选择CSV文件\r\n    print(\"请选择CSV文件...\")\r\n    file_path = select_csv_file()\r\n    \r\n    if not file_path:\r\n        print(\"未选择文件，程序退出。\")\r\n        return None\r\n    \r\n    # 尝试不同的编码读取CSV文件\r\n    encodings = ['utf-8', 'gbk', 'gb2312', 'latin1']\r\n    df = None\r\n    \r\n    for encoding in encodings:\r\n        try:\r\n            df = pd.read_csv(file_path, encoding=encoding)\r\n            print(f\"成功读取文件: {file_path} (编码: {encoding})\")\r\n            break\r\n        except Exception as e:\r\n            print(f\"使用 {encoding} 编码读取失败: {str(e)[:50]}...\")\r\n            continue\r\n    \r\n    if df is None:\r\n        print(\"尝试多种编码后仍然无法读取文件，请检查文件格式。\")\r\n        return None\r\n    \r\n    print(f\"数据集包含 {len(df)} 行\")\r\n    \r\n    # 询问用户是否知道数据集长度\r\n    know_length = input(\"您是否知道需要读取的数据范围？(y/n): \").lower().strip()\r\n    \r\n    if know_length == 'y':\r\n        # 用户知道数据范围，要求输入范围\r\n        range_input = input(\"请输入数据范围 (例如: B3:B222): \").strip()\r\n        try:\r\n            # 解析范围输入\r\n            col, start_row, end_row = parse_range_input(range_input)\r\n            # 将列字母转换为索引\r\n            col_index = column_letter_to_index(col)\r\n            # 提取数据\r\n            data = df.iloc[start_row-1:end_row, col_index].dropna().tolist()\r\n            print(f\"成功从范围 {range_input} 提取 {len(data)} 个数据点\")\r\n            # 转换为数值类型\r\n            numeric_data = convert_to_numeric(data)\r\n            print(f\"转换后得到 {len(numeric_data)} 个数值数据点\")\r\n            return numeric_data\r\n        except Exception as e:\r\n            print(f\"解析范围输入失败: {e}\")\r\n            return None\r\n    else:\r\n        # 用户不知道数据范围，要求输入列\r\n        column_input = input(\"请输入数据所在的列 (例如: C): \").strip().upper()\r\n        try:\r\n            # 将列字母转换为索引\r\n            col_index = column_letter_to_index(column_input)\r\n            # 提取整列数据并去除空值\r\n            data = df.iloc[:, col_index].dropna().tolist()\r\n            print(f\"成功从列 {column_input} 提取 {len(data)} 个数据点\")\r\n            # 转换为数值类型\r\n            numeric_data = convert_to_numeric(data)\r\n            print(f\"转换后得到 {len(numeric_data)} 个数值数据点\")\r\n            return numeric_data\r\n        except Exception as e:\r\n            print(f\"读取列数据失败: {e}\")\r\n            return None\r\n\r\ndef explain_analysis_to_beginner(data, outliers, autocorr, yf_positive, xf_positive, slope, r_value):\r\n    \"\"\"为统计学入门者提供易于理解的分析解释\"\"\"\r\n    print(\"\\n\" + \"=\" * 60)\r\n    print(\"简易数据分析报告（入门版）\")\r\n    print(\"=\" * 60)\r\n    \r\n    print(\"\\n这份报告将用通俗易懂的语言解释数据分析结果：\")\r\n    \r\n    # 基本统计解释\r\n    print(f\"\\n1. 数据概况:\")\r\n    print(f\"   我们分析了 {len(data)} 个数据点\")\r\n    print(f\"   这些数据的平均值是 {np.mean(data):.4f}\")\r\n    print(f\"   数据最小值是 {min(data):.4f}，最大值是 {max(data):.4f}\")\r\n    print(f\"   数据的标准差是 {np.std(data):.4f}，这个数值越大说明数据波动越大\")\r\n    \r\n    # 趋势解释\r\n    print(f\"\\n2. 数据趋势:\")\r\n    if slope > 0.001:\r\n        print(\"   整体来看，数据呈上升趋势\")\r\n        print(f\"   每增加一个数据点，数值平均增加 {slope:.6f}\")\r\n    elif slope < -0.001:\r\n        print(\"   整体来看，数据呈下降趋势\")\r\n        print(f\"   每增加一个数据点，数值平均减少 {abs(slope):.6f}\")\r\n    else:\r\n        print(\"   整体来看，数据没有明显的上升或下降趋势\")\r\n    \r\n    # 异常值解释\r\n    print(f\"\\n3. 异常数据:\")\r\n    if len(outliers) > 0:\r\n        print(f\"   我们发现了 {len(outliers)} 个异常数据点\")\r\n        print(\"   这些数据点与其他数据差异较大，可能是特殊情况或测量误差\")\r\n    else:\r\n        print(\"   没有发现明显的异常数据点\")\r\n    \r\n    # 相关性解释\r\n    print(f\"\\n4. 数据的规律性:\")\r\n    if abs(autocorr[1]) > 0.3:\r\n        print(\"   数据具有一定的规律性，当前值与前一个值有一定关联\")\r\n    else:\r\n        print(\"   数据看起来比较随机，当前值与前一个值关联不大\")\r\n    \r\n    # 周期性解释\r\n    print(f\"\\n5. 数据的周期性:\")\r\n    top_freq_indices = np.argsort(yf_positive)[-3:]  # 前3个主要频率\r\n    periodic_found = False\r\n    for idx in reversed(top_freq_indices):\r\n        if xf_positive[idx] > 0.001:\r\n            period = 1 / xf_positive[idx] if xf_positive[idx] > 0 else float('inf')\r\n            if period < len(data)/2:  # 只考虑合理周期\r\n                print(f\"   数据可能存在周期性变化，大约每 {period:.1f} 个数据点重复一次\")\r\n                periodic_found = True\r\n                break\r\n    \r\n    if not periodic_found:\r\n        print(\"   数据没有明显的周期性变化\")\r\n    \r\n    print(\"\\n\" + \"=\" * 60)\r\n    print(\"简易分析报告结束\")\r\n    print(\"=\" * 60)\r\n\r\ndef analyze_data(data):\r\n    \"\"\"执行数据分析\"\"\"\r\n    if len(data) == 0:\r\n        print(\"错误: 没有有效的数值数据可供分析\")\r\n        return\r\n        \r\n    print(\"=\" * 60)\r\n    print(\"数据趋势分析报告\")\r\n    print(\"=\" * 60)\r\n\r\n    # 1. 基本统计分析\r\n    print(f\"\\n1. 数据基本信息:\")\r\n    print(f\"   数据总量: {len(data)} 个点\")\r\n    print(f\"   数据范围: {min(data):.4f} 到 {max(data):.4f}\")\r\n    print(f\"   平均值: {np.mean(data):.6f}\")\r\n    print(f\"   标准差: {np.std(data):.6f}\")\r\n    print(f\"   中位数: {np.median(data):.6f}\")\r\n    print(f\"   偏度: {stats.skew(data):.6f}\")\r\n    print(f\"   峰度: {stats.kurtosis(data):.6f}\")\r\n\r\n    # 创建主图\r\n    fig = plt.figure(figsize=(20, 16))\r\n\r\n    # 2. 整体趋势可视化\r\n    ax1 = plt.subplot(4, 4, 1)\r\n    plt.plot(data, 'b-', alpha=0.7, linewidth=0.8)\r\n    plt.title('原始数据序列', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 3. 移动平均趋势\r\n    ax2 = plt.subplot(4, 4, 2)\r\n    window_size = min(50, len(data) // 10)  # 自适应窗口大小\r\n    moving_avg = pd.Series(data).rolling(window=window_size, center=True).mean()\r\n    plt.plot(data, 'b-', alpha=0.3, linewidth=0.5, label='原始数据')\r\n    plt.plot(moving_avg, 'r-', linewidth=2, label=f'{window_size}点移动平均')\r\n    plt.title('移动平均趋势', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 4. 数据分布直方图\r\n    ax3 = plt.subplot(4, 4, 3)\r\n    n, bins, patches = plt.hist(data, bins=100, alpha=0.7, edgecolor='black', density=True)\r\n    plt.title('数据分布直方图', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数值')\r\n    plt.ylabel('概率密度')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 添加正态分布曲线对比\r\n    xmin, xmax = plt.xlim()\r\n    x = np.linspace(xmin, xmax, 100)\r\n    p = stats.norm.pdf(x, np.mean(data), np.std(data))\r\n    plt.plot(x, p, 'r-', linewidth=2, label='正态分布')\r\n    plt.axvline(np.mean(data), color='r', linestyle='--', label=f'均值: {np.mean(data):.4f}')\r\n    plt.axvline(np.median(data), color='g', linestyle='--', label=f'中位数: {np.median(data):.4f}')\r\n    plt.legend()\r\n\r\n    # 5. Q-Q图（正态性检验）\r\n    ax4 = plt.subplot(4, 4, 4)\r\n    stats.probplot(data, dist=\"norm\", plot=plt)\r\n    plt.title('Q-Q图 (正态性检验)', fontsize=12, fontweight='bold')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 6. 波动性分析 - 滚动标准差\r\n    ax5 = plt.subplot(4, 4, 5)\r\n    rolling_std = pd.Series(data).rolling(window=window_size, center=True).std()\r\n    plt.plot(rolling_std, 'g-', linewidth=1.5)\r\n    plt.title(f'{window_size}点滚动标准差', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('标准差')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 7. 异常值检测\r\n    ax6 = plt.subplot(4, 4, 6)\r\n    z_scores = np.abs(stats.zscore(data))\r\n    outliers = np.where(z_scores > 3)[0]\r\n    plt.plot(data, 'b-', alpha=0.5, linewidth=0.8)\r\n    plt.scatter(outliers, [data[i] for i in outliers], color='red', s=30, zorder=5, label='异常值 (|z|>3)')\r\n    plt.title(f'异常值检测 (共{len(outliers)}个)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 8. 自相关函数 (ACF)\r\n    ax7 = plt.subplot(4, 4, 7)\r\n    lags = min(100, len(data) // 10)  # 自适应滞后数\r\n    autocorr = acf(data, nlags=lags)\r\n    plt.stem(range(lags + 1), autocorr, basefmt=\" \")\r\n    plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)\r\n    plt.axhline(y=1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5, label='95%置信区间')\r\n    plt.axhline(y=-1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5)\r\n    plt.title('自相关函数 (ACF)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('滞后')\r\n    plt.ylabel('自相关系数')\r\n    plt.grid(True, alpha=0.3)\r\n    plt.legend()\r\n\r\n    # 9. 偏自相关函数 (PACF)\r\n    ax8 = plt.subplot(4, 4, 8)\r\n    partial_autocorr = pacf(data, nlags=min(50, lags))\r\n    plt.stem(range(len(partial_autocorr)), partial_autocorr, basefmt=\" \")\r\n    plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)\r\n    plt.axhline(y=1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5, label='95%置信区间')\r\n    plt.axhline(y=-1.96 / np.sqrt(len(data)), color='r', linestyle='--', alpha=0.5)\r\n    plt.title('偏自相关函数 (PACF)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('滞后')\r\n    plt.ylabel('偏自相关系数')\r\n    plt.grid(True, alpha=0.3)\r\n    plt.legend()\r\n\r\n    # 10. 频谱分析\r\n    ax9 = plt.subplot(4, 4, 9)\r\n    yf = fft(data)\r\n    xf = fftfreq(len(data), 1)\r\n    positive_freq = xf > 0\r\n    xf_positive = xf[positive_freq]\r\n    yf_positive = 2.0 / len(data) * np.abs(yf[positive_freq])\r\n    plt.plot(xf_positive, yf_positive)\r\n    plt.title('频谱分析', fontsize=12, fontweight='bold')\r\n    plt.xlabel('频率')\r\n    plt.ylabel('幅度')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 11. 累积分布函数\r\n    ax10 = plt.subplot(4, 4, 10)\r\n    sorted_data = np.sort(data)\r\n    cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)\r\n    plt.plot(sorted_data, cdf, 'b-', linewidth=2)\r\n    plt.title('累积分布函数 (CDF)', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数值')\r\n    plt.ylabel('累积概率')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 12. 箱线图\r\n    ax11 = plt.subplot(4, 4, 11)\r\n    plt.boxplot(data, vert=True)\r\n    plt.title('箱线图', fontsize=12, fontweight='bold')\r\n    plt.ylabel('数值')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 13. 分段趋势分析 (前4段)\r\n    ax12 = plt.subplot(4, 4, 12)\r\n    num_segments = 4\r\n    segment_length = len(data) // num_segments\r\n    colors = ['blue', 'green', 'red', 'purple']\r\n\r\n    for i in range(num_segments):\r\n        start_idx = i * segment_length\r\n        end_idx = (i + 1) * segment_length if i < num_segments - 1 else len(data)\r\n        segment_data = data[start_idx:end_idx]\r\n\r\n        # 计算每段的趋势线\r\n        x_segment = np.array(range(len(segment_data)))\r\n        slope_segment, intercept, r_value_segment, p_value, std_err = stats.linregress(x_segment, segment_data)\r\n\r\n        plt.plot(range(start_idx, end_idx), segment_data, color=colors[i], alpha=0.7,\r\n                 linewidth=1, label=f'段{i + 1}')\r\n\r\n    plt.title('数据分段展示', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 14. 移动平均对比 (不同窗口)\r\n    ax13 = plt.subplot(4, 4, 13)\r\n    windows = [10, 30, 50]\r\n    for window in windows:\r\n        if window < len(data):\r\n            ma = pd.Series(data).rolling(window=window, center=True).mean()\r\n            plt.plot(ma, label=f'{window}点移动平均', linewidth=1.5)\r\n    plt.title('不同窗口移动平均对比', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 15. 数据差分 (检测平稳性)\r\n    ax14 = plt.subplot(4, 4, 14)\r\n    diff_data = np.diff(data)\r\n    plt.plot(range(1, len(data)), diff_data, 'b-', alpha=0.7, linewidth=0.8)\r\n    plt.title('一阶差分序列', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('差分值')\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 16. 滚动统计量\r\n    ax15 = plt.subplot(4, 4, 15)\r\n    rolling_mean = pd.Series(data).rolling(window=window_size, center=True).mean()\r\n    rolling_std = pd.Series(data).rolling(window=window_size, center=True).std()\r\n\r\n    plt.plot(rolling_mean, 'b-', label='滚动均值', linewidth=1.5)\r\n    plt.plot(rolling_std, 'r-', label='滚动标准差', linewidth=1.5)\r\n    plt.title('滚动统计量', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    # 17. 季节性分解模拟 (简单版本)\r\n    ax16 = plt.subplot(4, 4, 16)\r\n    # 使用移动平均来近似趋势成分\r\n    trend = pd.Series(data).rolling(window=100, center=True).mean()\r\n    # 残差 = 原始数据 - 趋势\r\n    residual = [data[i] - (trend[i] if not pd.isna(trend[i]) else 0) for i in range(len(data))]\r\n\r\n    plt.plot(data, 'b-', alpha=0.3, label='原始数据', linewidth=0.8)\r\n    plt.plot(trend, 'r-', label='趋势成分', linewidth=1.5)\r\n    plt.plot(residual, 'g-', alpha=0.5, label='残差成分', linewidth=0.8)\r\n    plt.title('趋势-残差分解', fontsize=12, fontweight='bold')\r\n    plt.xlabel('数据点索引')\r\n    plt.ylabel('数值')\r\n    plt.legend()\r\n    plt.grid(True, alpha=0.3)\r\n\r\n    plt.tight_layout()\r\n    plt.show()\r\n\r\n    # 输出详细分析报告\r\n    print(f\"\\n2. 异常值分析:\")\r\n    print(f\"   检测到 {len(outliers)} 个异常值 (Z-score > 3)\")\r\n    if len(outliers) > 0:\r\n        print(f\"   最大异常值: {max([data[i] for i in outliers]):.4f}\")\r\n        print(f\"   最小异常值: {min([data[i] for i in outliers]):.4f}\")\r\n\r\n    print(f\"\\n3. 自相关分析:\")\r\n    print(f\"   一阶自相关系数: {autocorr[1]:.4f}\")\r\n    print(f\"   二阶自相关系数: {autocorr[2]:.4f}\")\r\n\r\n    print(f\"\\n4. 频谱分析:\")\r\n    top_freq_indices = np.argsort(yf_positive)[-5:]  # 前5个主要频率\r\n    print(\"   主要频率成分:\")\r\n    for idx in top_freq_indices:\r\n        if xf_positive[idx] > 0.001:  # 忽略接近零的频率\r\n            period = 1 / xf_positive[idx] if xf_positive[idx] > 0 else float('inf')\r\n            print(f\"     频率: {xf_positive[idx]:.6f}, 周期: {period:.1f}点, 幅度: {yf_positive[idx]:.6f}\")\r\n\r\n    print(f\"\\n5. 趋势分析:\")\r\n    # 计算整体趋势\r\n    x = np.array(range(len(data)))\r\n    slope, intercept, r_value, p_value, std_err = stats.linregress(x, data)\r\n    print(f\"   整体趋势斜率: {slope:.8f}\")\r\n    print(f\"   趋势显著性 (R²): {r_value ** 2:.4f}\")\r\n    if slope > 0:\r\n        print(\"   整体趋势: 上升\")\r\n    elif slope < 0:\r\n        print(\"   整体趋势: 下降\")\r\n    else:\r\n        print(\"   整体趋势: 平稳\")\r\n\r\n    print(f\"\\n6. 数据质量评估:\")\r\n    missing_values = sum(pd.isna(data)) if hasattr(data, 'isna') else 0\r\n    print(f\"   缺失值数量: {missing_values}\")\r\n    print(f\"   数据完整性: {(1 - missing_values / len(data)) * 100:.2f}%\")\r\n\r\n    # 为统计学入门者提供简易解释\r\n    explain_analysis_to_beginner(data, outliers, autocorr, yf_positive, xf_positive, slope, r_value)\r\n\r\n    print(\"\\n\" + \"=\" * 60)\r\n    print(\"分析完成！\")\r\n    print(\"=\" * 60)\r\n\r\ndef main():\r\n    # 读取数据\r\n    data = read_csv_data()\r\n    if data is None:\r\n        print(\"数据读取失败，程序退出。\")\r\n        return\r\n    \r\n    # 执行分析\r\n    analyze_data(data)\r\n\r\n# 运行主程序\r\nif __name__ == \"__main__\":\r\n    main()
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/CSVDataAnalyzer.py b/CSVDataAnalyzer.py
+--- a/CSVDataAnalyzer.py	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/CSVDataAnalyzer.py	(date 1762518980806)
+@@ -41,6 +41,7 @@
+     # 隐藏主窗口
+     root = tk.Tk()
+     root.withdraw()
++    root.attributes('-topmost', True)  # 确保对话框置顶显示
+     
+     # 打开文件选择对话框
+     file_path = filedialog.askopenfilename(
+@@ -96,11 +97,24 @@
+     print(f"数据集包含 {len(df)} 行")
+     
+     # 询问用户是否知道数据集长度
+-    know_length = input("您是否知道需要读取的数据范围？(y/n): ").lower().strip()
++    print("\n提示：如果您想退出程序，请输入 'q' 或 'quit'")
++    know_length_input = input("您是否知道需要读取的数据范围？(y/n): ").lower().strip()
+     
+-    if know_length == 'y':
++    # 检查是否要退出
++    if know_length_input in ['q', 'quit']:
++        print("程序已退出。")
++        return None
++    
++    if know_length_input == 'y':
+         # 用户知道数据范围，要求输入范围
++        print("\n提示：如果您想退出程序，请输入 'q' 或 'quit'")
+         range_input = input("请输入数据范围 (例如: B3:B222): ").strip()
++        
++        # 检查是否要退出
++        if range_input in ['q', 'quit']:
++            print("程序已退出。")
++            return None
++            
+         try:
+             # 解析范围输入
+             col, start_row, end_row = parse_range_input(range_input)
+@@ -118,7 +132,14 @@
+             return None
+     else:
+         # 用户不知道数据范围，要求输入列
++        print("\n提示：如果您想退出程序，请输入 'q' 或 'quit'")
+         column_input = input("请输入数据所在的列 (例如: C): ").strip().upper()
++        
++        # 检查是否要退出
++        if column_input in ['Q', 'QUIT']:
++            print("程序已退出。")
++            return None
++            
+         try:
+             # 将列字母转换为索引
+             col_index = column_letter_to_index(column_input)
+Index: Fed_in_Print.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import requests\r\nimport csv\r\nimport os\r\n\r\n# --- 配置 ---\r\nAPI_KEY = \"2360a68c16b805cf2a02db06372ce22c\"\r\nBASE_URL = \"https://fedinprint.org/api\"\r\n# 每页请求多少条记录，最大值似乎是100\r\nITEMS_PER_PAGE = 100\r\n\r\ndef get_articles(keyword=None):\r\n    \"\"\"\r\n    从 Fed in Print API 获取文章数据。\r\n    如果提供了关键词，则按标题搜索。否则，获取所有文章。\r\n    \"\"\"\r\n    if keyword:\r\n        print(f\"正在搜索关键词为 '{keyword}' 的文章...\")\r\n        endpoint = f\"{BASE_URL}/item/search\"\r\n        params = {\"title\": keyword}\r\n    else:\r\n        print(\"准备获取所有文章...\")\r\n        endpoint = f\"{BASE_URL}/item\"\r\n        params = {}\r\n\r\n    # 使用 Session 可以复用TCP连接，并保持headers\r\n    session = requests.Session()\r\n    session.headers.update({\"X-API-Key\": API_KEY})\r\n\r\n    all_articles = []\r\n    page = 1\r\n    \r\n    while True:\r\n        params['limit'] = ITEMS_PER_PAGE\r\n        params['page'] = page\r\n        \r\n        try:\r\n            print(f\"正在获取第 {page} 页...\")\r\n            response = session.get(endpoint, params=params, timeout=30)\r\n            # 检查请求是否成功\r\n            response.raise_for_status() \r\n            \r\n            data = response.json()\r\n            records = data.get(\"records\", [])\r\n\r\n            if not records:\r\n                print(\"未找到更多记录，获取结束。\")\r\n                break\r\n\r\n            for record in records:\r\n                # 提取作者名字并合并成一个字符串\r\n                authors = \", \".join([author.get(\"name\", \"\") for author in record.get(\"author\", [])])\r\n                \r\n                # 提取第一个可用的文件链接\r\n                file_url = \"\"\r\n                if record.get(\"file\"):\r\n                    file_url = record[\"file\"][0].get(\"fileurl\", \"\")\r\n\r\n                all_articles.append({\r\n                    \"title\": record.get(\"title\", \"N/A\"),\r\n                    \"authors\": authors,\r\n                    \"publication_date\": record.get(\"publicationDate\", \"N/A\"), # 注意API返回的字段可能是publicationDate\r\n                    \"abstract\": record.get(\"abstract\", \"N/A\"),\r\n                    \"url\": file_url,\r\n                    \"id\": record.get(\"id\", \"N/A\")\r\n                })\r\n            \r\n            page += 1\r\n\r\n        except requests.exceptions.HTTPError as e:\r\n            print(f\"HTTP 错误: {e}\")\r\n            print(f\"服务器返回内容: {response.text}\")\r\n            break\r\n        except requests.exceptions.RequestException as e:\r\n            print(f\"请求发生错误: {e}\")\r\n            break\r\n        except ValueError: # JSONDecodeError\r\n            print(f\"无法解析返回的 JSON 数据。\")\r\n            print(f\"服务器返回内容: {response.text}\")\r\n            break\r\n\r\n    return all_articles\r\n\r\ndef save_to_csv(articles, filename):\r\n    \"\"\"将文章列表保存到 CSV 文件。\"\"\"\r\n    if not articles:\r\n        print(\"没有找到任何文章，无需创建文件。\")\r\n        return\r\n\r\n    try:\r\n        # 定义CSV文件的表头\r\n        fieldnames = [\"title\", \"authors\", \"publication_date\", \"abstract\", \"url\", \"id\"]\r\n        \r\n        with open(filename, \"w\", newline=\"\", encoding=\"utf-8\") as csvfile:\r\n            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)\r\n            writer.writeheader()\r\n            writer.writerows(articles)\r\n        print(f\"\\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}\")\r\n\r\n    except IOError as e:\r\n        print(f\"写入文件时发生错误: {e}\")\r\n\r\nif __name__ == \"__main__\":\r\n    # 1. 获取用户输入\r\n    search_keyword = input(\"请输入搜索关键词 (直接按 Enter 获取所有文章): \").strip()\r\n\r\n    # 2. 调用函数获取数据\r\n    articles_found = get_articles(search_keyword if search_keyword else None)\r\n\r\n    # 3. 将结果保存到文件\r\n    if articles_found:\r\n        if search_keyword:\r\n            output_filename = f\"fed_articles_{search_keyword.replace(' ', '_')}.csv\"\r\n        else:\r\n            output_filename = \"fed_articles_all.csv\"\r\n        save_to_csv(articles_found, output_filename)\r\n```\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Fed_in_Print.py b/Fed_in_Print.py
+--- a/Fed_in_Print.py	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/Fed_in_Print.py	(date 1762089480769)
+@@ -5,24 +5,17 @@
+ # --- 配置 ---
+ API_KEY = "2360a68c16b805cf2a02db06372ce22c"
+ BASE_URL = "https://fedinprint.org/api"
+-# 每页请求多少条记录，最大值似乎是100
+ ITEMS_PER_PAGE = 100
+ 
+ def get_articles(keyword=None):
+-    """
+-    从 Fed in Print API 获取文章数据。
+-    如果提供了关键词，则按标题搜索。否则，获取所有文章。
+-    """
+     if keyword:
+-        print(f"正在搜索关键词为 '{keyword}' 的文章...")
++        print(f"正在搜索标题中包含 '{keyword}' 的文章...")
+         endpoint = f"{BASE_URL}/item/search"
+         params = {"title": keyword}
+     else:
+         print("准备获取所有文章...")
+         endpoint = f"{BASE_URL}/item"
+         params = {}
+-
+-    # 使用 Session 可以复用TCP连接，并保持headers
+     session = requests.Session()
+     session.headers.update({"X-API-Key": API_KEY})
+ 
+@@ -36,9 +29,7 @@
+         try:
+             print(f"正在获取第 {page} 页...")
+             response = session.get(endpoint, params=params, timeout=30)
+-            # 检查请求是否成功
+             response.raise_for_status() 
+-            
+             data = response.json()
+             records = data.get("records", [])
+ 
+@@ -47,70 +38,123 @@
+                 break
+ 
+             for record in records:
+-                # 提取作者名字并合并成一个字符串
+-                authors = ", ".join([author.get("name", "") for author in record.get("author", [])])
+-                
+-                # 提取第一个可用的文件链接
++                # 检查record是否为字典，如果不是则跳过
++                if not isinstance(record, dict):
++                    print(f"警告: 跳过无效记录类型 {type(record)}")
++                    continue
++
++                # 安全处理作者信息
++                authors = "N/A"
++                try:
++                    authors_data = record.get("author", [])
++                    if isinstance(authors_data, list):
++                        author_names = []
++                        for author in authors_data:
++                            if isinstance(author, dict):
++                                author_names.append(author.get("name", "Unknown"))
++                            else:
++                                author_names.append(str(author))
++                        authors = ", ".join(author_names)
++                    else:
++                        authors = str(authors_data) if authors_data else "N/A"
++                except Exception as e:
++                    record_id = "未知"
++                    if isinstance(record, dict):
++                        record_id = record.get('id', 'N/A')
++                    print(f"处理作者信息时出错 (ID: {record_id}): {e}")
++                    authors = "N/A"
++
+                 file_url = ""
+-                if record.get("file"):
+-                    file_url = record["file"][0].get("fileurl", "")
++                if isinstance(record.get("file"), list) and len(record["file"]) > 0:
++                    file_url = record["file"][0].get("fileurl", "") if isinstance(record["file"][0], dict) else ""
+ 
+-                all_articles.append({
+-                    "title": record.get("title", "N/A"),
++                article_data = {
++                    "title": record.get("title", "N/A") if isinstance(record, dict) else "N/A",
+                     "authors": authors,
+-                    "publication_date": record.get("publicationDate", "N/A"), # 注意API返回的字段可能是publicationDate
+-                    "abstract": record.get("abstract", "N/A"),
++                    "publication_date": record.get("publication_date",
++                                                   record.get("publicationDate", "N/A")) if isinstance(record,
++                                                                                                       dict) else "N/A",
++                    "abstract": record.get("abstract", "N/A") if isinstance(record, dict) else "N/A",
+                     "url": file_url,
+-                    "id": record.get("id", "N/A")
+-                })
++                    "id": record.get("id", "N/A") if isinstance(record, dict) else "N/A"
++                }
++                
++                # 如果指定了关键词，则只添加标题中包含关键词的文章
++                if keyword:
++                    title = article_data.get("title", "").lower()
++                    if title and keyword.lower() in title:
++                        all_articles.append(article_data)
++                else:
++                    all_articles.append(article_data)
+             
+             page += 1
+-
+         except requests.exceptions.HTTPError as e:
+             print(f"HTTP 错误: {e}")
+-            print(f"服务器返回内容: {response.text}")
++            print(f"服务器可能拒绝了请求或出现了问题。服务器返回内容: {response.text}")
+             break
+         except requests.exceptions.RequestException as e:
+-            print(f"请求发生错误: {e}")
++            print(f"请求发生网络错误: {e}")
+             break
+-        except ValueError: # JSONDecodeError
+-            print(f"无法解析返回的 JSON 数据。")
++        except ValueError:
++            print(f"无法解析服务器返回的 JSON 数据。")
+             print(f"服务器返回内容: {response.text}")
+             break
+ 
+     return all_articles
+ 
+ def save_to_csv(articles, filename):
+-    """将文章列表保存到 CSV 文件。"""
+     if not articles:
+         print("没有找到任何文章，无需创建文件。")
+         return
+ 
+     try:
+-        # 定义CSV文件的表头
+         fieldnames = ["title", "authors", "publication_date", "abstract", "url", "id"]
+-        
+         with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+             writer.writeheader()
+             writer.writerows(articles)
+         print(f"\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}")
+-
+     except IOError as e:
+-        print(f"写入文件时发生错误: {e}")
++        print(f"写入文件时发生 I/O 错误: {e}")
++
++
++def display_articles(articles, keyword=None):
++    """
++    显示文章列表
++    """
++    if not articles:
++        print("未找到任何文章。")
++        return
++
++    print(f"\n找到 {len(articles)} 篇文章:")
++    print("-" * 80)
++
++    for i, article in enumerate(articles, 1):
++        title = article.get("title", "N/A")
++        authors = article.get("authors", "N/A")
++        pub_date = article.get("publication_date", "N/A")
++
++        print(f"{i}. 标题: {title}")
++        print(f"   作者: {authors}")
++        print(f"   发布日期: {pub_date}")
++        print(f"   ID: {article.get('id', 'N/A')}")
++        print()
++
+ 
+ if __name__ == "__main__":
+-    # 1. 获取用户输入
+     search_keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()
+ 
+-    # 2. 调用函数获取数据
++    # 获取文章
+     articles_found = get_articles(search_keyword if search_keyword else None)
+ 
+-    # 3. 将结果保存到文件
++    # 显示文章列表
++    display_articles(articles_found, search_keyword)
++
++    # 保存到CSV文件
+     if articles_found:
+         if search_keyword:
+-            output_filename = f"fed_articles_{search_keyword.replace(' ', '_')}.csv"
++            safe_keyword = search_keyword.replace(' ', '_').replace('/', '_')
++            output_filename = f"fed_articles_{safe_keyword}.csv"
+         else:
+             output_filename = "fed_articles_all.csv"
+-        save_to_csv(articles_found, output_filename)
+-```
++        save_to_csv(articles_found, output_filename)
+\ No newline at end of file
+Index: fed_articles_inflation.csv
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/fed_articles_inflation.csv b/fed_articles_inflation.csv
+new file mode 100644
+--- /dev/null	(date 1762089751534)
++++ b/fed_articles_inflation.csv	(date 1762089751534)
+@@ -0,0 +1,46 @@
++title,authors,publication_date,abstract,url,id
++Implications of structural changes in the U.S. economy for pricing behavior and inflation dynamics,"Willis, Jonathan L.",N/A,"Some key features of the behavior of inflation in the United States appear to have changed in the past 20 years, with potentially important implications for forecasters and policymakers. Recent studies have provided evidence of a decline in both the variability and persistence of inflation. ; Such shifts in the behavior or dynamics of inflation would necessitate changes in the economic relationships used by policymakers and economists to assess current conditions, forecast key economic indicators, and determine the implications of policy changes for future economic activity. ; Willis examines how structural changes in the economy over the past two decades may have affected the price-setting behavior of firms and, in turn, the behavior of aggregate inflation. He concludes that structural changes in the economy over the past 20 years have likely contributed to a decrease in the persistence and volatility of inflation.",https://www.kansascityfed.org/documents/1659/Implications_of_Structural_Changes_in_the_U.S._Economy_for_Pricing_Behavior_and_Inflat.pdf,fedker:31251
++Negating the inflation potential of the Fed's lending programs,"Thornton, Daniel L.",N/A,"The sale of typical securities would force the Fed to contract its lending programs, whereas the sale of Fed bills would not.",http://research.stlouisfed.org/publications/es/09/ES0930.pdf,fedles:21006
++Pandemic-Era Inflation Drivers and Global Spillovers,"Silva, Alvaro, Kalemli-Özcan, Ṣebnem, Yildirim, Muhammed A., di Giovanni, Julian",N/A,"We estimate a multi-country, multi-sector New Keynesian model to quantify the drivers of domestic inflation during 2020–23 in several countries, including the United States. The model matches observed inflation together with sector-level prices and wages. We further measure the relative importance of different types of shocks on inflation across countries over time. The key mechanism, the international transmission of demand, supply and energy shocks through global linkages helps us to match the behavior of the USD/EUR exchange rate. The quantification exercise yields four key findings. First, negative supply shocks to factors of production, labor and intermediate inputs, initially sparked inflation in 2020-21. Global supply chains and complementarities in production played an amplification role in this initial phase. Second, positive aggregate demand shocks, due to stimulative policies, widened demand-supply imbalances, amplifying inflation further during 2021-22. Third, the reallocation of consumption between goods and service sectors, a relative sector-level demand shock, played a role in transmitting these imbalances across countries through the global trade and production network. Fourth, global energy shocks have differential impacts on the U.S. relative to other countries’ inflation rates. Further, complementarities between energy and other inputs to production play a particularly important role in the quantitative impact of these shocks on inflation.",https://www.newyorkfed.org/medialibrary/media/research/staff_reports/sr1080.pdf,fednsr:97350
++"How Long is Too Long? How High is Too High?: Managing Recent Inflation Developments within the FOMC’s Monetary Policy Framework: a speech at the 2021 Milken Institute Global Conference ""Charting a New Course,"" Beverly Hills, California, October 20, 2021","Quarles, Randal K.",N/A,N/A,https://www.federalreserve.gov/newsevents/speech/files/quarles20211020a.pdf,fedgsq:93263
++Does inflation reduce productivity?,"Sbordone, Argia M., Kuttner, Kenneth N.",N/A,N/A,http://www.chicagofed.org/digital_assets/publications/economic_perspectives/1994/ep_nov_dec1994_part1_sbordone.pdf,fedhep:5849
++Federal Reserve credibility and inflation scares,"Lansing, Kevin J., Huh, Chan Guk",N/A,"We develop a simple, quantitative model of the U.S. economy to demonstrate how an \""inflation scare \"" may occur when the Federal Reserve lacks full credibility. In particular, we show that the long-term nominal interest rate may undergo a sudden increase if an adverse movement in the inflation rate triggers a deterioration in the public's beliefs about the Federal Reserve's commitment to maintaining low inflation in the future. We find that simulations from our model capture some observed patterns of U.S. interest rates in the 1980s.",https://www.frbsf.org/economic-research/wp-content/uploads/sites/4/3-16-2.pdf,fedfer:23432
++Monetary policy and inflation in China,"Cheng, Hang-Sheng",N/A,N/A,,fedfpr:28557
++Progress in controlling inflation,anonymous,N/A,N/A,https://fraser.stlouisfed.org/scribd/?toc_id=499287&filepath=/docs/publications/frbslreview/rev_stls_196911.pdf&start_page=2#scribd-open,fedlrv:25508
++Inflation continues,anonymous,N/A,N/A,https://files.stlouisfed.org/files/htdocs/publications/review/69/08/Continues_Aug1969.pdf,fedlrv:24672
++Nobel views on inflation and unemployment,"Walsh, Carl E.",N/A,N/A,https://www.frbsf.org/research-and-insights/publications/economic-letter/1997/01/nobel-views-on-inflation-and-unemployment/,fedfel:1994
++"Online Retailing, Self-Employment Disrupt Inflation","Duca, John V.",N/A,"The employment status of increasing numbers of workers has become contingent in recent years—that is, there is greater freelance, or “gig,” employment. This development has coincided over the past two decades with an era of increasing online commerce that provides consumers a wider array of products and services at competitive prices.",https://www.dallasfed.org/research/economics/2019/0416,d00001:89340
++Another attempt to quantify the benefits of reducing inflation,"Braun, R. Anton",N/A,"This article estimates the benefits of reducing U.S. inflation below its current level when the government simultaneously raises another distortionary tax. Other researchers have suggested that reducing inflation would have fairly large benefits?from 1 to 3 percent of gross domestic product. But that result depends on the unrealistic assumption that the government would replace inflation with a lump-sum tax, one which does not affect people's incentives. If, instead, inflation is replaced with an increase in the labor income tax, then the welfare gains that can be expected from reducing inflation below its current level are much smaller?from one-third to one-half of 1 percent of gross domestic product.",http://minneapolisfed.org/research/qr/qr1842.html,fedmqr:41754
++"Identification and estimation of a model of hyperinflation with a continuum of \""sunspot\"" equilibrium","Wallace, Neil, Sargent, Thomas J.",N/A,"This paper constructs a model with two structural equations: the Government budget constraint and a linear version of Cagan?s portfolio balance equation. The model contains a continuum of equilibria with ?sunspot equilibria.? Closed forms for the solutions are found. Even though there is a continuum of equilibria, the model is overidentified econometrically, so that the model restricts time series data on price levels and currency stocks. We describe how the free parameters of the model can be estimated, including some parameters that serve to index particular members of the continuum of equilibria. The sunspot equilibria hold out some promise of explaining anomalies in the observed behavior of inflation and real balances during hyperinflations.",http://www.minneapolisfed.org/research/common/pub_detail.cfm?pb_autonum_id=551,fedmwp:42456:original
++Inflation persistence,"Fuhrer, Jeffrey C.",N/A,"This paper examines the concept of inflation persistence in macroeconomic theory. It begins with a definition of persistence, emphasizing the difference between reduced-form and structural persistence. It then examines a number of empirical measures of reduced-form persistence, considering the possibility that persistence may have changed over time. The paper then examines the theoretical sources of persistence, distinguishing ?intrinsic? from ?inherited? persistence, and deriving a number of analytical results on persistence. It summarizes the implications for persistence from the literatures on ?sticky-information? models, learning models, and so-called ?trend inflation models,? providing some new results throughout.",http://www.bostonfed.org/economic/wp/wp2009/wp0914.htm,fedbwp:7197:original
++What is the optimal inflation rate?,"Billi, Roberto M., Kahn, George A.",N/A,"With inflation in the United States and elsewhere low by historical standards, the question of what inflation rate policymakers should aim for has moved front and center. Knowing what inflation rate to aim for is critically important for maximizing the economic well-being of the public. ; Most policymakers agree they should not allow inflation to fall below zero because the costs of deflation are thought to be high. They disagree, however, about how much above zero, if any, central banks should aim to keep inflation. Unfortunately, rigorous estimates of an \\""optimal inflation rate\\"" have not been available in the economics literature. ; Billi and Kahn provide estimates of the optimal inflation rate. Based on a standard, modern macroeconomic model calibrated to U.S. data, they estimate the optimal inflation rate to be 0.7 to 1.4 percent per year as measured by the PCE price index. This estimate is the first to be based on an economic model in which policymakers are assumed explicitly to maximize the economic well-being of the public. Further research is required to confirm or refine these results using models that incorporate a richer array of possible interactions between the long-run inflation objective and economic stability.",https://www.kansascityfed.org/documents/512/PDF-2q08billi_kahn.pdf,fedker:31161
++"How to Extend the U.S. Expansion: A Suggestion: a presentation at the Real Return XII: The Inflation-Linked Products Conference 2018, New York, N.Y.","Bullard, James B.",N/A,"In New York, St. Louis Fed President James Bullard laid out a possible strategy for extending the U.S. economic expansion. The strategy relies on placing more weight on financial market signals, such as the slope of the yield curve and market-based inflation expectations, than is customary. He noted that many current approaches to monetary policy strategy continue to overemphasize the now-defunct empirics of the Phillips curve, whose inflation-unemployment relationship has largely broken down over the past two decades. ?Handled properly, current financial market information can provide the basis for a better forward-looking monetary policy strategy,? he said. He also noted that these signals could help the FOMC better identify the neutral policy rate. ?The flattening yield curve and subdued market-based inflation expectations suggest that the current monetary policy stance is already neutral or possibly somewhat restrictive,? he said.",https://www.stlouisfed.org/~/media/files/pdfs/bullard/remarks/2018/bullard_real_return_xii_nyc_5_sept_2018.pdf,fedlps:33173
++The TIPS yield curve and inflation compensation,"Gürkaynak, Refet S., Sack, Brian P., Wright, Jonathan H.",N/A,"For over ten years, the U.S. Treasury has issued index-linked debt. Federal Reserve Board staff have fitted a yield curve to these indexed securities at the daily frequency from the start of 1999 to the present. This paper describes the methodology that is used and makes the estimates public. Comparison with the corresponding nominal yield curve allows measures of inflation compensation (or breakeven inflation rates) to be computed. We discuss the interpretation of inflation compensation and its relationship to inflation expectations and uncertainty, offering some empirical evidence that these measures are affected by an inflation risk premium that varies considerably at high frequency. In addition, we also find evidence that inflation compensation was held down in the early years of the sample by a premium associated with the illiquidity of TIPS at the time. We hope that the TIPS yield curve and inflation compensation data, which are posted here and will be updated periodically, will provide a useful tool to applied economists.",http://www.federalreserve.gov/pubs/feds/2008/200805/200805abs.html,fedgfe:34553:original
++"Money supply, credit expansion, and housing price inflation","Wen, Yi",N/A,Credit and M2 may be driven simultaneously as part of a broader financial intermediation process; a common underlying factor may be the interest rate,http://research.stlouisfed.org/publications/es/10/ES1006.pdf,fedles:20819
++Inflation and growth - commentary,"Kocherlakota, Narayana R.",N/A,N/A,http://research.stlouisfed.org/publications/review/96/05/9605nk.pdf,fedlpr:30337
++"Inflation, financial markets and capital formation - commentary","Chatterjee, Satyajit",N/A,N/A,http://research.stlouisfed.org/publications/review/96/05/9605sc2.pdf,fedlpr:30325
++"Inflation dynamics and international linkages: a model of the United States, the euro area, and Japan","Coenen, Günter, Wieland, Volker W.",N/A,"In this paper we estimate a small macroeconometric model of the United States, the euro area and Japan with rational expectations and nominal rigidities due to staggered contracts. Comparing three popular contracting specifications we find that euro area and Japanese inflation dynamics are best explained by Taylor-style contracts, while Buiter-Jewitt/Fuhrer-Moore contracts perform somewhat better in fitting U.S. inflation dynamics. We are unable to fit Calvo-style contracts to inflation dynamics in any of the three economies without allowing either for ad-hoc persistence in unobservables or a significant backward-looking element. The completed model matches inflation and output dynamics in the United States, the euro area and Japan quite well. We then use it to evaluate the role of the exchange rate for monetary policy. Preliminary results, which are similar across the three economies, indicate little gain from a direct policy response to the exchange rate.",http://www.federalreserve.gov/pubs/ifdp/2002/745/default.htm,fedgif:36519:original
++"Taxes, inflation, and the allocation of capital","Mauskopf, Eileen, Conrad, William E.",N/A,N/A,,fedgmo:24594
++Do Phillips curves conditionally help to forecast inflation?,"Dotsey, Michael, Stark, Tom, Fujita, Shigeru",N/A,"This paper reexamines the forecasting ability of Phillips curves from both an unconditional and conditional perspective by applying the method developed by Giacomini and White (2006). We find that forecasts from our Phillips curve models tend to be unconditionally inferior to those from our univariate forecasting models. We also find, however, that conditioning on the state of the economy sometimes does improve the performance of the Phillips curve model in a statistically significant manner. When we do find improvement, it is asymmetric -- Phillips curve forecasts tend to be more accurate when the economy is weak and less accurate when the economy is strong. Any improvement we find, however, vanished over the post-1984 period. Supersedes WP 11-40.",https://web.archive.org/web/20161208192339/https://www.philadelphiafed.org/-/media/research-and-data/publications/working-papers/2015/wp15-16.pdf,fedpwp:4330:original
++Calibrating central bank inflation messages is key to policy success,"Tutino, Antonella",N/A,A well-crafted message about the current and future state of the economy can influence the private sector’s expectations and guide behavior to ensure that the economy remains strong and prices stable even amid threatening supply-and-demand shocks.,https://www.dallasfed.org/research/economics/2023/0328,d00001:95907
++Inflation and financial market performance: what have we learned in the last ten years?,"Champ, Bruce A., Boyd, John H.",N/A,"The last decade has witnessed a great deal of theoretical and empirical research on the relationships between inflation, financial market performance, and economic growth. This paper provides a survey of that literature and presents new cross-country empirical results on this topic. We find that inflation is negatively associated with banking industry size, real returns on financial assets, and bank profitability. We also discover a positive relationship between asset return volatility and inflation.",https://doi.org/10.26509/frbc-wp-200317,fedcwp:39618:original
++Forecasts of inflation for VAR models,"Webb, Roy H.",N/A,"Why are forecasts of inflation from VAR models so much worse then their forecasts of real variables? This paper documents that relatively poor performance, and finds that the price equation of a VAR model fitted to U.S. postwar data is poorly specified. Statistical work by other authors has found that coefficients in such price equations may not be constant. Based on specific monetary actions, two changes in monetary policy regimes are proposed. Accounting for those two shifts yields significantly more accurate forecasts and lessens the evidence of misspecification.",http://www.richmondfed.org/publications/research/working_papers/1994/wp_94-8.cfm,fedrwp:18445:original
++"A New View of the Relationship Between Oil Prices, Gasoline Prices and Inflation Expectations","Zhou, Xiaoqing, Kilian, Lutz",N/A,"It has been considered self-evident until recently that oil prices drive inflation expectations, but new evidence calls into question this conclusion.",https://www.dallasfed.org/research/economics/2020/0922,d00001:88778
++Beyond the Mean: Exploring Tail Risks in Inflation Expectations,"Kozlowski, Julian",N/A,An analysis of inflation expectations suggests that financial market participants see a 50% probability that CPI inflation could be higher than 2.5% over the next five years.,https://www.stlouisfed.org/on-the-economy/2024/jul/exploring-tail-risks-inflation-expectations,l00001:98546
++Inflation and financial sector size,"English, William B.",N/A,"Traditionally, the cost of expected inflation has been seen as the \""shoeleather cost\"" of going to the bank more often. This paper focuses on the other side of these transactions--i.e., on the increased production of financial services by financial firms. I construct a model in which households must make purchases either with cash or with costly transactions services produced by firms in the financial services sector. Higher inflation leads households to substitute purchased transactions services for money balances, increasing the size of the financial sector. A test of the model using cross-sectional data suggests that this effect is large.",http://www.federalreserve.gov/pubs/feds/1996/199616/199616abs.html,fedgfe:34096:original
++Adjusting to high inflation: the Israeli experience,"Shiffer, Zalman F.",N/A,N/A,https://files.stlouisfed.org/files/htdocs/publications/review/86/05/Adjusting_May1986.pdf,fedlrv:24778
++A multi-country comparison of the linkages between inflation and exchange rate competitiveness,"Kamin, Steven B.",N/A,"This paper describes research comparing the response of inflation to changes in exchange rate competitiveness in various regions of the world. The paper first presents evidence that an empirical relationship between the rate of inflation and the level of the real exchange rate, which was documented for Mexico in previous research by the author, holds for a large set of other countries as well. This result may pose a dilemma for policy-makers, since it implies that it may not be possible to achieve low inflation and a high export competitiveness simultaneously. The paper then demonstrates that the responsiveness of inflation to the real exchange rate has been much higher in Latin America than in Asian or industrialised countries. This difference in inflationary responsiveness is not fully explained either by the prior history of inflation or by the extent of openness to foreign trade. It is possible that the lower responsiveness of inflation to the real exchange rate in Asia than in Latin America is what has allowed the Asian countries to remain more consistently focused on maintaining competitiveness and export growth.",http://www.federalreserve.gov/pubs/ifdp/1998/603/default.htm,fedgif:37348:original
++The Relationship Between Oil Prices and Inflation Compensation,"Vigfusson, Robert J., Perez-Segura, Alejandro",N/A,"In this note, we provide new empirical evidence supporting this conjecture that changes in the outlook for global economic activity explain the co-movement between oil prices and inflation compensation. In particular, we present an empirical strategy to identify changes in oil prices that are a response to economic activity (demand-induced) and changes in oil prices that are responding to oil-specific developments (supply-induced). Our main finding is that demand-induced oil price declines can explain most of the move in inflation compensation. As a consequence, economists would do well to pay less attention to oil prices and more attention to macroeconomic factors in explaining the decline in inflation compensation.",https://www.federalreserve.gov/econresdata/notes/ifdp-notes/2016/relationship-between-oil-prices-and-inflation-compensation-20160406.html,fedgin:30826
++"The U.S. economy, globalization, and inflation measurement (with brief references to brawls, beer, and bikinis)","Fisher, Richard W.",N/A,"Remarks before the Australian Business Economists, Sydney, Australia, November 14, 2007. ; Our job has been made more complicated by globalization--the freer flow of goods, services, money, ideas and people across national borders. Its present incarnation owes a great deal to the revolution in information technology. Faster, cheaper and better communications are breaking down barriers to international business and knitting the world's economies closer together faster than Skippy could outsmart a pack of hungry dingoes.\""",http://dallasfed.org/news/speeches/fisher/2007/fs071114.cfm,feddsp:28960
++Hedging inflation and income risks,"Shiller, Robert J.",N/A,"This paper describes potential new markets for long-term inflation risk, and shows the relationship such markets would have to other potential new markets, markets for long-term claims on income aggregates. One inflation-risk market which would be very useful is a market for long-term (or perpetual) claims on a cash flow of constant real value each period, a cash flow measured each period by an index of consumer prices. Such markets need not take the form of indexed government or corporate debt; it would be more natural to create futures-like markets for cash flows tied to an index and paid by shorts in the market. ; The potential use for such long-term inflation risk markets is put into perspective here by comparing the long-term risks to the real value of nominal claims to the long-term risks to national products and dividend incomes, using data on 54 countries 1950-90.",,fedfap:17564:original
++"Inflation Expectations and Monetary Policymaking: A speech at Public Talk: Reflections on Recent Economic Developments,” cosponsored by the Griswold Center for Economic Policy Studies and the Julis-Rabinowitz Center for Public Policy and Finance, Princeton University, Princeton, New Jersey., April 2, 2025","Kugler, Adriana",N/A,N/A,https://www.federalreserve.gov/newsevents/speech/files/kugler20250402a.pdf,fedgsq:99763
++Do commodity price spikes cause long-term inflation?,"Tootell, Geoffrey M. B.",N/A,This public policy brief examines the relationship between trend inflation and commodity price increases and finds that evidence from recent decades supports the notion that commodity price changes do not affect the long-run inflation rate. Evidence from earlier decades suggests that effects on inflation expectations and wages played a key role in whether commodity price movements altered trend inflation. This brief is based on a memo to the president of the Federal Reserve Bank of Boston as background to a meeting of the Federal Open Market Committee.,http://www.bostonfed.org/economic/ppb/2011/ppb111.pdf,fedbpb:11610
++Improving inflation forecasts in the medium to long term,"Zaman, Saeed",N/A,"To accurately forecast the future rate of inflation, it is imperative to account for inflation?s underlying trend. This is especially important for medium- to long-run forecasts. In this Commentary I demonstrate a simple but powerful technique for incorporating this trend into standard statistical time series models and report the gains to accuracy. I find that incorporating the trend by modeling inflation as gap from an estimated underlying trend leads to substantial gains in forecast accuracy of about 20 percent to 30 percent, two to three years out.",https://doi.org/10.26509/frbc-ec-201316,fedcec:29285
++"Central bank independence, inflation and growth in transition economies","Sheets, Nathan, Loungani, Prakash",N/A,"In this paper, we document two empirical relationships that have emerged as the former communist countries have taken steps to transform their economies from command systems to market-based systems. First, increased central bank independence has tended to improve inflation performance. Second, high inflation has adversely affected real activity. More specifically, in the first section of this paper, we develop indices of central bank independence (CBI) for twelve transition economies and examine the relationship between CBI and inflation performance across these countries. Statistical evidence suggests that the transition economies with more independent central banks have achieved lower inflation than their counterparts. The second section of this paper studies the relationship between inflation and growth in twenty-six transition economies. We present econometric evidence indicating that reducing inflation helps stabilize economic activity, following the sharp output declines that occur during the initial stages of transition. The paper conc1udes that establishing an independent central bank is a concrete institutional reform that may reduce inflation and thus facilitate economic growth.",http://www.federalreserve.gov/pubs/ifdp/1995/519/default.htm,fedgif:36870:original
++Forecasts of inflation and interest rates in no-arbitrage affine models,"Gospodinov, Nikolay, Wei, Bin",N/A,"In this paper, we examine the forecasting ability of an affine term structure framework that jointly models the markets for Treasuries, inflation-protected securities, inflation derivatives, and oil future prices based on no-arbitrage restrictions across these markets. On the methodological side, we propose a novel way of incorporating information from these markets into an affine model. On the empirical side, two main findings emerge from our analysis. First, incorporating information from inflation options can often produce more accurate inflation forecasts than those based on the Survey of Professional Forecasters. Second, incorporating oil futures tends to improve short-term inflation and longer-term nominal yield forecasts.",https://www.frbatlanta.org/-/media/Documents/research/publications/wp/2016/03.pdf?la=en,fedawp:13553:original
++The Macroeconomic Risks of Undesirably Low Inflation,"Erceg, Christopher J., Arias, Jonas E., Trabandt, Mathias",N/A,"This paper investigates the macroeconomic risks associated with undesirably low inflation using a medium-sized New Keynesian model. We consider different causes of persistently low inflation, including a downward shift in long-run inflation expectations, a fall in nominal wage growth, and a favorable supply-side shock. We show that the macroeconomic effects of persistently low inflation depend crucially on its underlying cause, as well as on the extent to which monetary policy is constrained by the zero lower bound. Finally, we discuss policy options to mitigate these effects.",http://www.federalreserve.gov/econresdata/ifdp/2016/files/ifdp1162.pdf,fedgif:37101:original
++The origin and impact of inflation,"Francis, Darryl R.",N/A,N/A,https://fraser.stlouisfed.org/scribd/?toc_id=500158&filepath=/docs/publications/frbslreview/rev_stls_197512.pdf&start_page=18#scribd-open,fedlrv:25101
++"Weaker GDP Growth, Inflation Uncertainty Dim U.S. Economic Outlook","Kliesen, Kevin L.",N/A,Forecasts for weaker U.S. GDP growth in 2023 and uncertainty over high inflation contrast sharply with strong labor market conditions and household consumption.,https://www.stlouisfed.org/publications/regional-economist/2022/nov/weaker-gdp-growth-inflation-uncertainty-us-economic-outlook,fedlre:95209
++Inflation and financial markets,anonymous,N/A,N/A,https://www.frbsf.org/wp-content/uploads/75-4_3-4.pdf,fedfer:23401
++Inflation: an extreme view,"Kareken, John H.",N/A,N/A,https://www.minneapolisfed.org/research/qr/qr212.pdf,fedmqr:41627
++Simple ways to forecast inflation: what works best?,"Meyer, Brent, Pasaogullari, Mehmet",N/A,"There are many ways to forecast the future rate of inflation, ranging from sophisticated statistical models involving hundreds of variables to hunches based on past experience. We generate a number of forecasts using a simple statistical model and an even simpler estimating rule, adding in various measures thought to be helpful in predicting the course of inflation. Then we compare their forecast accuracy. We find that no single specification outperforms all others over all time periods. For example, the median and 16 percent trimmed-mean measures outperform all other specifications during the 1990s, and survey-based inflation expectations seem to do better during volatile periods.",https://doi.org/10.26509/frbc-ec-201017,fedcec:29655
+Index: .idea/modules.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+new file mode 100644
+--- /dev/null	(date 1762089183675)
++++ b/.idea/modules.xml	(date 1762089183675)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectModuleManager">
++    <modules>
++      <module fileurl="file://$PROJECT_DIR$/.idea/PythonBox.iml" filepath="$PROJECT_DIR$/.idea/PythonBox.iml" />
++    </modules>
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/.gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+new file mode 100644
+--- /dev/null	(date 1762089183674)
++++ b/.idea/.gitignore	(date 1762089183674)
+@@ -0,0 +1,8 @@
++# 默认忽略的文件
++/shelf/
++/workspace.xml
++# 基于编辑器的 HTTP 客户端请求
++/httpRequests/
++# Datasource local storage ignored files
++/dataSources/
++/dataSources.local.xml
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"AutoImportSettings\">\r\n    <option name=\"autoReloadType\" value=\"SELECTIVE\" />\r\n  </component>\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"fab17371-cc06-49ef-87e6-87f8ca99d6f5\" name=\"更改\" comment=\"Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt\" />\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\r\n  </component>\r\n  <component name=\"GitHubPullRequestSearchHistory\">{\r\n  &quot;lastFilter&quot;: {\r\n    &quot;state&quot;: &quot;OPEN&quot;,\r\n    &quot;assignee&quot;: &quot;xuquanhan&quot;\r\n  }\r\n}</component>\r\n  <component name=\"GithubPullRequestsUISettings\">{\r\n  &quot;selectedUrlAndAccountId&quot;: {\r\n    &quot;url&quot;: &quot;https://github.com/xuquanhan/pythonbox.git&quot;,\r\n    &quot;accountId&quot;: &quot;65e79495-dbc4-4e62-8040-c8ee4876d4c0&quot;\r\n  }\r\n}</component>\r\n  <component name=\"ProjectColorInfo\">{\r\n  &quot;associatedIndex&quot;: 8\r\n}</component>\r\n  <component name=\"ProjectId\" id=\"30wR0rtySJmEAxftNmK4p3ee0dn\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\"><![CDATA[{\r\n  \"keyToString\": {\r\n    \"ModuleVcsDetector.initialDetectionPerformed\": \"true\",\r\n    \"Python.CSVDataAnalyzer.executor\": \"Run\",\r\n    \"Python.Fed_in_Print.executor\": \"Run\",\r\n    \"Python.HP-Filter.executor\": \"Run\",\r\n    \"Python.TradingEcon_HomeDesktop.executor\": \"Run\",\r\n    \"Python.scratch_1.executor\": \"Run\",\r\n    \"RunOnceActivity.ShowReadmeOnStart\": \"true\",\r\n    \"RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252\": \"true\",\r\n    \"RunOnceActivity.git.unshallow\": \"true\",\r\n    \"git-widget-placeholder\": \"正在合并 main\",\r\n    \"ignore.virus.scanning.warn.message\": \"true\",\r\n    \"settings.editor.selected.configurable\": \"Code Search\"\r\n  },\r\n  \"keyToStringList\": {\r\n    \"com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件\": [\r\n      \"Python\"\r\n    ]\r\n  }\r\n}]]></component>\r\n  <component name=\"RunManager\" selected=\"Python.CSVDataAnalyzer\">\r\n    <configuration name=\"CSVDataAnalyzer\" type=\"PythonConfigurationType\" factoryName=\"Python\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"SDK_NAME\" value=\"Python 3.13\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"false\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/CSVDataAnalyzer.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"Fed_in_Print\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"true\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/Fed_in_Print.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"HP-Filter\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"true\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/HP-Filter.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"StatisticsModels\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$APPLICATION_CONFIG_DIR$/scratches\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"false\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"C:\\Users\\xuqua\\AppData\\Roaming\\JetBrains\\PyCharm2025.2\\scratches\\StatisticsModels.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <configuration name=\"TradingEcon_HomeDesktop\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\r\n      <module name=\"PythonBox\" />\r\n      <option name=\"ENV_FILES\" value=\"\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"PARENT_ENVS\" value=\"true\" />\r\n      <envs>\r\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\r\n      </envs>\r\n      <option name=\"SDK_HOME\" value=\"\" />\r\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$/../../OneDrive/Work/ICBC/Quants/Scripts\" />\r\n      <option name=\"IS_MODULE_SDK\" value=\"false\" />\r\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\r\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\r\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/../../OneDrive/Work/ICBC/Quants/Scripts/TradingEcon_HomeDesktop.py\" />\r\n      <option name=\"PARAMETERS\" value=\"\" />\r\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\r\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\r\n      <option name=\"MODULE_MODE\" value=\"false\" />\r\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\r\n      <option name=\"INPUT_FILE\" value=\"\" />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <recent_temporary>\r\n      <list>\r\n        <item itemvalue=\"Python.StatisticsModels\" />\r\n        <item itemvalue=\"Python.TradingEcon_HomeDesktop\" />\r\n        <item itemvalue=\"Python.HP-Filter\" />\r\n        <item itemvalue=\"Python.Fed_in_Print\" />\r\n      </list>\r\n    </recent_temporary>\r\n  </component>\r\n  <component name=\"SharedIndexes\">\r\n    <attachedChunks>\r\n      <set>\r\n        <option value=\"bundled-python-sdk-b3ae9b5d7125-f0eec537fc84-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.23892.439\" />\r\n      </set>\r\n    </attachedChunks>\r\n  </component>\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"默认任务\">\r\n      <changelist id=\"fab17371-cc06-49ef-87e6-87f8ca99d6f5\" name=\"更改\" comment=\"Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt\" />\r\n      <created>1754536429858</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1754536429858</updated>\r\n    </task>\r\n    <servers />\r\n  </component>\r\n  <component name=\"Vcs.Log.Tabs.Properties\">\r\n    <option name=\"TAB_STATES\">\r\n      <map>\r\n        <entry key=\"MAIN\">\r\n          <value>\r\n            <State />\r\n          </value>\r\n        </entry>\r\n      </map>\r\n    </option>\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/.idea/workspace.xml	(date 1762518971990)
+@@ -4,7 +4,15 @@
+     <option name="autoReloadType" value="SELECTIVE" />
+   </component>
+   <component name="ChangeListManager">
+-    <list default="true" id="fab17371-cc06-49ef-87e6-87f8ca99d6f5" name="更改" comment="Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt" />
++    <list default="true" id="fab17371-cc06-49ef-87e6-87f8ca99d6f5" name="更改" comment="resolve merge conflicts">
++      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
++      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
++      <change afterPath="$PROJECT_DIR$/fed_articles_inflation.csv" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/CSVDataAnalyzer.py" beforeDir="false" afterPath="$PROJECT_DIR$/CSVDataAnalyzer.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/Fed_in_Print.py" beforeDir="false" afterPath="$PROJECT_DIR$/Fed_in_Print.py" afterDir="false" />
++    </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+@@ -25,6 +33,9 @@
+     &quot;accountId&quot;: &quot;65e79495-dbc4-4e62-8040-c8ee4876d4c0&quot;
+   }
+ }</component>
++  <component name="ProblemsViewState">
++    <option name="selectedTabId" value="ProjectErrors" />
++  </component>
+   <component name="ProjectColorInfo">{
+   &quot;associatedIndex&quot;: 8
+ }</component>
+@@ -33,28 +44,29 @@
+     <option name="hideEmptyMiddlePackages" value="true" />
+     <option name="showLibraryContents" value="true" />
+   </component>
+-  <component name="PropertiesComponent"><![CDATA[{
+-  "keyToString": {
+-    "ModuleVcsDetector.initialDetectionPerformed": "true",
+-    "Python.CSVDataAnalyzer.executor": "Run",
+-    "Python.Fed_in_Print.executor": "Run",
+-    "Python.HP-Filter.executor": "Run",
+-    "Python.TradingEcon_HomeDesktop.executor": "Run",
+-    "Python.scratch_1.executor": "Run",
+-    "RunOnceActivity.ShowReadmeOnStart": "true",
+-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+-    "RunOnceActivity.git.unshallow": "true",
+-    "git-widget-placeholder": "正在合并 main",
+-    "ignore.virus.scanning.warn.message": "true",
+-    "settings.editor.selected.configurable": "Code Search"
++  <component name="PropertiesComponent">{
++  &quot;keyToString&quot;: {
++    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
++    &quot;Python.CSVDataAnalyzer.executor&quot;: &quot;Run&quot;,
++    &quot;Python.Fed_in_Print.executor&quot;: &quot;Run&quot;,
++    &quot;Python.HP-Filter.executor&quot;: &quot;Run&quot;,
++    &quot;Python.TradingEcon_HomeDesktop (1).executor&quot;: &quot;Run&quot;,
++    &quot;Python.TradingEcon_HomeDesktop.executor&quot;: &quot;Run&quot;,
++    &quot;Python.scratch_1.executor&quot;: &quot;Run&quot;,
++    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
++    &quot;git-widget-placeholder&quot;: &quot;正在合并 main&quot;,
++    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
++    &quot;settings.editor.selected.configurable&quot;: &quot;Code Search&quot;
+   },
+-  "keyToStringList": {
+-    "com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件": [
+-      "Python"
++  &quot;keyToStringList&quot;: {
++    &quot;com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件&quot;: [
++      &quot;Python&quot;
+     ]
+   }
+-}]]></component>
+-  <component name="RunManager" selected="Python.CSVDataAnalyzer">
++}</component>
++  <component name="RunManager" selected="Python.TradingEcon_HomeDesktop (1)">
+     <configuration name="CSVDataAnalyzer" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+       <module name="PythonBox" />
+       <option name="ENV_FILES" value="" />
+@@ -144,6 +156,29 @@
+       <option name="INPUT_FILE" value="" />
+       <method v="2" />
+     </configuration>
++    <configuration name="TradingEcon_HomeDesktop (1)" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
++      <module name="PythonBox" />
++      <option name="ENV_FILES" value="" />
++      <option name="INTERPRETER_OPTIONS" value="" />
++      <option name="PARENT_ENVS" value="true" />
++      <envs>
++        <env name="PYTHONUNBUFFERED" value="1" />
++      </envs>
++      <option name="SDK_HOME" value="" />
++      <option name="SDK_NAME" value="Python 3.13 (PythonBox)" />
++      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../../OneDrive/Work/ICBC/Scripts" />
++      <option name="IS_MODULE_SDK" value="false" />
++      <option name="ADD_CONTENT_ROOTS" value="true" />
++      <option name="ADD_SOURCE_ROOTS" value="true" />
++      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/../../OneDrive/Work/ICBC/Scripts/TradingEcon_HomeDesktop.py" />
++      <option name="PARAMETERS" value="" />
++      <option name="SHOW_COMMAND_LINE" value="false" />
++      <option name="EMULATE_TERMINAL" value="false" />
++      <option name="MODULE_MODE" value="false" />
++      <option name="REDIRECT_INPUT" value="false" />
++      <option name="INPUT_FILE" value="" />
++      <method v="2" />
++    </configuration>
+     <configuration name="TradingEcon_HomeDesktop" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+       <module name="PythonBox" />
+       <option name="ENV_FILES" value="" />
+@@ -168,10 +203,11 @@
+     </configuration>
+     <recent_temporary>
+       <list>
++        <item itemvalue="Python.TradingEcon_HomeDesktop (1)" />
++        <item itemvalue="Python.Fed_in_Print" />
+         <item itemvalue="Python.StatisticsModels" />
+         <item itemvalue="Python.TradingEcon_HomeDesktop" />
+         <item itemvalue="Python.HP-Filter" />
+-        <item itemvalue="Python.Fed_in_Print" />
+       </list>
+     </recent_temporary>
+   </component>
+@@ -203,4 +239,8 @@
+       </map>
+     </option>
+   </component>
++  <component name="VcsManagerConfiguration">
++    <MESSAGE value="resolve merge conflicts" />
++    <option name="LAST_COMMIT_MESSAGE" value="resolve merge conflicts" />
++  </component>
+ </project>
+\ No newline at end of file
+Index: .idea/misc.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"Black\">\r\n    <option name=\"sdkName\" value=\"Python 3.13 (PythonBox)\" />\r\n  </component>\r\n  <component name=\"ProjectRootManager\" version=\"2\" project-jdk-name=\"Python 3.13 (PythonBox)\" project-jdk-type=\"Python SDK\" />\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+--- a/.idea/misc.xml	(revision 24142417bca3b873a6ca48395206d3407c3a1f46)
++++ b/.idea/misc.xml	(date 1762089521671)
+@@ -1,7 +1,5 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
+   <component name="Black">
+-    <option name="sdkName" value="Python 3.13 (PythonBox)" />
+   </component>
+-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.13 (PythonBox)" project-jdk-type="Python SDK" />
+ </project>
+\ No newline at end of file

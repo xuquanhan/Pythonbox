@@ -4,11 +4,25 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fab17371-cc06-49ef-87e6-87f8ca99d6f5" name="更改" comment="Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt" />
+    <list default="true" id="fab17371-cc06-49ef-87e6-87f8ca99d6f5" name="更改" comment="Merge branch 'main' of https://github.com/xuquanhan/pythonbox&#10;&#10;# Conflicts:&#10;#&#9;Fed_in_Print.py&#10;#&#9;requirements.txt">
+      <change afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Qwen.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/PythonBox.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/PythonBox.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Fed_in_Print.py" beforeDir="false" afterPath="$PROJECT_DIR$/Fed_in_Print.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -33,28 +47,32 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python.CSVDataAnalyzer.executor": "Run",
-    "Python.Fed_in_Print.executor": "Run",
-    "Python.HP-Filter.executor": "Run",
-    "Python.TradingEcon_HomeDesktop.executor": "Run",
-    "Python.scratch_1.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "正在合并 main",
-    "ignore.virus.scanning.warn.message": "true",
-    "settings.editor.selected.configurable": "Code Search"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.CSVDataAnalyzer.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Fed_in_Print.executor&quot;: &quot;Run&quot;,
+    &quot;Python.HP-Filter.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Qwen (1).executor&quot;: &quot;Run&quot;,
+    &quot;Python.Qwen.executor&quot;: &quot;Run&quot;,
+    &quot;Python.TradingEcon_HomeDesktop (1).executor&quot;: &quot;Run&quot;,
+    &quot;Python.TradingEcon_HomeDesktop.executor&quot;: &quot;Run&quot;,
+    &quot;Python.scratch_1.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;正在合并 main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.intellij.mcpserver.settings&quot;
   },
-  "keyToStringList": {
-    "com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件": [
-      "Python"
+  &quot;keyToStringList&quot;: {
+    &quot;com.intellij.ide.scratch.ScratchImplUtil$2/新建临时文件&quot;: [
+      &quot;Python&quot;
     ]
   }
-}]]></component>
-  <component name="RunManager" selected="Python.CSVDataAnalyzer">
+}</component>
+  <component name="RunManager" selected="Python.Fed_in_Print">
     <configuration name="CSVDataAnalyzer" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="PythonBox" />
       <option name="ENV_FILES" value="" />
@@ -100,7 +118,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="HP-Filter" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="Qwen (1)" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="PythonBox" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -113,7 +131,7 @@
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/HP-Filter.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Qwen.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -122,7 +140,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="StatisticsModels" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="Qwen" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="PythonBox" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -131,11 +149,33 @@
         <env name="PYTHONUNBUFFERED" value="1" />
       </envs>
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$APPLICATION_CONFIG_DIR$/scratches" />
+      <option name="WORKING_DIRECTORY" value="$USER_HOME$/Desktop" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="C:\Users\xuqua\AppData\Roaming\JetBrains\PyCharm2025.2\scratches\StatisticsModels.py" />
+      <option name="SCRIPT_NAME" value="$USER_HOME$/Desktop/Qwen.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="TradingEcon_HomeDesktop (1)" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="PythonBox" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/TradingEcon_HomeDesktop.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -166,12 +206,21 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <list>
+      <item itemvalue="Python.CSVDataAnalyzer" />
+      <item itemvalue="Python.Fed_in_Print" />
+      <item itemvalue="Python.Qwen (1)" />
+      <item itemvalue="Python.Qwen" />
+      <item itemvalue="Python.TradingEcon_HomeDesktop (1)" />
+      <item itemvalue="Python.TradingEcon_HomeDesktop" />
+    </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.StatisticsModels" />
-        <item itemvalue="Python.TradingEcon_HomeDesktop" />
-        <item itemvalue="Python.HP-Filter" />
         <item itemvalue="Python.Fed_in_Print" />
+        <item itemvalue="Python.TradingEcon_HomeDesktop (1)" />
+        <item itemvalue="Python.TradingEcon_HomeDesktop" />
+        <item itemvalue="Python.Qwen (1)" />
+        <item itemvalue="Python.Qwen" />
       </list>
     </recent_temporary>
   </component>

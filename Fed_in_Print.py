@@ -40,20 +40,47 @@ def get_articles(keyword=None):
             response.raise_for_status() 
             
             data = response.json()
+            print(f"API响应数据结构: {type(data)}, keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
             records = data.get("records", [])
 
             if not records:
                 print("未找到更多记录，获取结束。")
                 break
 
+            print(f"Records类型: {type(records)}, 长度: {len(records) if isinstance(records, (list, tuple)) else 'N/A'}")
+            if records:
+                print(f"第一条记录类型: {type(records[0])}")
+                if isinstance(records[0], dict):
+                    print(f"第一条记录keys: {list(records[0].keys())}")
+
             for record in records:
                 # 提取作者名字并合并成一个字符串
-                authors = ", ".join([author.get("name", "") for author in record.get("author", [])])
+                # 首先检查record是否为字典
+                if not isinstance(record, dict):
+                    print(f"警告: record不是字典类型，而是 {type(record)}，内容: {record}")
+                    # 如果record不是字典，跳过此记录
+                    continue
+                
+                # 处理author字段可能为列表或字典的情况
+                authors_list = record.get("author", [])
+                authors = ""
+                if isinstance(authors_list, list):
+                    # 如果author是列表，遍历每个元素获取名字
+                    authors = ", ".join([author.get("name", "") if isinstance(author, dict) else str(author) for author in authors_list])
+                elif isinstance(authors_list, dict):
+                    # 如果author是字典，直接获取名字
+                    authors = authors_list.get("name", "")
+                else:
+                    # 其他情况，转换为字符串
+                    authors = str(authors_list)
                 
                 # 提取第一个可用的文件链接
                 file_url = ""
                 if record.get("file"):
-                    file_url = record["file"][0].get("fileurl", "")
+                    if isinstance(record["file"], list) and len(record["file"]) > 0:
+                        file_url = record["file"][0].get("fileurl", "")
+                    else:
+                        file_url = str(record["file"]) if "file" in record else ""
 
                 all_articles.append({
                     "title": record.get("title", "N/A"),
@@ -113,4 +140,3 @@ if __name__ == "__main__":
         else:
             output_filename = "fed_articles_all.csv"
         save_to_csv(articles_found, output_filename)
-```
