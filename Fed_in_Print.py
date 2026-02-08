@@ -1,142 +1,170 @@
 import requests
 import csv
 import os
+import re
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # --- 配置 ---
-API_KEY = "2360a68c16b805cf2a02db06372ce22c"
+API_KEY = os.getenv("FED_IN_PRINT_API_KEY")
 BASE_URL = "https://fedinprint.org/api"
-# 每页请求多少条记录，最大值似乎是100
 ITEMS_PER_PAGE = 100
 
-def get_articles(keyword=None):
-    """
-    从 Fed in Print API 获取文章数据。
-    如果提供了关键词，则按标题搜索。否则，获取所有文章。
-    """
-    if keyword:
-        print(f"正在搜索关键词为 '{keyword}' 的文章...")
-        endpoint = f"{BASE_URL}/item/search"
-        params = {"title": keyword}
-    else:
-        print("准备获取所有文章...")
-        endpoint = f"{BASE_URL}/item"
-        params = {}
 
-    # 使用 Session 可以复用TCP连接，并保持headers
+def ask_search_scope() -> int:
+    while True:
+        choice = input(
+            "请选择搜索范围：\n"
+            "0 - 标题 + 摘要\n"
+            "1 - 仅标题\n"
+            "2 - 仅摘要\n"
+            "请输入 0 / 1 / 2："
+        ).strip()
+        if choice in {"0", "1", "2"}:
+            return int(choice)
+        print("输入无效，请重新输入。")
+
+
+def extract_year_from_title(title: str) -> str:
+    m = re.search(r'\b(19|20)\d{2}\b', title)
+    return m.group() if m else "N/A"
+
+
+def build_endpoint_and_params(scope: int, keyword: str):
+    if not keyword:
+        return f"{BASE_URL}/item", {}
+    if scope == 0:
+        return f"{BASE_URL}/item/search", {"title": keyword, "abstract": keyword}
+    elif scope == 1:
+        return f"{BASE_URL}/item/search", {"title": keyword}
+    else:  # scope == 2
+        return f"{BASE_URL}/item/search", {"abstract": keyword}
+
+
+def get_articles(keyword: str, scope: int):
+    # 检查API密钥
+    if not API_KEY or API_KEY == "YOUR_API_KEY_HERE":
+        print("错误: 请在.env文件中设置FED_IN_PRINT_API_KEY环境变量")
+        return []
+
+    endpoint, params = build_endpoint_and_params(scope, keyword)
+    if keyword:
+        scope_desc = ["标题+摘要", "仅标题", "仅摘要"][scope]
+        print(f"正在搜索 {scope_desc} 中包含'{keyword}' 的文章..")
+    else:
+        print("准备获取所有文章..")
+
     session = requests.Session()
     session.headers.update({"X-API-Key": API_KEY})
 
     all_articles = []
     page = 1
-    
     while True:
         params['limit'] = ITEMS_PER_PAGE
         params['page'] = page
-        
-        try:
-            print(f"正在获取第 {page} 页...")
-            response = session.get(endpoint, params=params, timeout=30)
-            # 检查请求是否成功
-            response.raise_for_status() 
-            
-            data = response.json()
-            print(f"API响应数据结构: {type(data)}, keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
-            records = data.get("records", [])
 
+        try:
+            data = session.get(endpoint, params=params, timeout=30).json()
+            records = data.get("records", [])
             if not records:
                 print("未找到更多记录，获取结束。")
                 break
 
-            print(f"Records类型: {type(records)}, 长度: {len(records) if isinstance(records, (list, tuple)) else 'N/A'}")
-            if records:
-                print(f"第一条记录类型: {type(records[0])}")
-                if isinstance(records[0], dict):
-                    print(f"第一条记录keys: {list(records[0].keys())}")
-
-            for record in records:
-                # 提取作者名字并合并成一个字符串
-                # 首先检查record是否为字典
-                if not isinstance(record, dict):
-                    print(f"警告: record不是字典类型，而是 {type(record)}，内容: {record}")
-                    # 如果record不是字典，跳过此记录
+            for rec in records:
+                if not isinstance(rec, dict):
                     continue
-                
-                # 处理author字段可能为列表或字典的情况
-                authors_list = record.get("author", [])
-                authors = ""
-                if isinstance(authors_list, list):
-                    # 如果author是列表，遍历每个元素获取名字
-                    authors = ", ".join([author.get("name", "") if isinstance(author, dict) else str(author) for author in authors_list])
-                elif isinstance(authors_list, dict):
-                    # 如果author是字典，直接获取名字
-                    authors = authors_list.get("name", "")
+
+                authors_data = rec.get("author", [])
+                if isinstance(authors_data, list):
+                    authors = ", ".join(
+                        a.get("name", "Unknown") if isinstance(a, dict) else str(a)
+                        for a in authors_data
+                    )
                 else:
-                    # 其他情况，转换为字符串
-                    authors = str(authors_list)
-                
-                # 提取第一个可用的文件链接
+                    authors = str(authors_data) if authors_data else "N/A"
+
                 file_url = ""
-                if record.get("file"):
-                    if isinstance(record["file"], list) and len(record["file"]) > 0:
-                        file_url = record["file"][0].get("fileurl", "")
-                    else:
-                        file_url = str(record["file"]) if "file" in record else ""
+                if isinstance(rec.get("file"), list) and rec["file"]:
+                    file_url = (
+                        rec["file"][0].get("fileurl", "")
+                        if isinstance(rec["file"][0], dict)
+                        else ""
+                    )
 
-                all_articles.append({
-                    "title": record.get("title", "N/A"),
+                pub_date = rec.get("publication_date") or rec.get("publicationDate")
+                year = pub_date if pub_date else extract_year_from_title(rec.get("title", ""))
+
+                article_data = {
+                    "title": rec.get("title", "N/A"),
                     "authors": authors,
-                    "publication_date": record.get("publicationDate", "N/A"), # 注意API返回的字段可能是publicationDate
-                    "abstract": record.get("abstract", "N/A"),
+                    "year": year,
+                    "pages": rec.get("pages", "N/A"),
                     "url": file_url,
-                    "id": record.get("id", "N/A")
-                })
-            
+                    "id": rec.get("id", "N/A"),
+                    "abstract": rec.get("abstract", "N/A"),
+                }
+
+                # 过滤逻辑
+                if keyword:
+                    title_lower = article_data["title"].lower()
+                    abstract_lower = article_data["abstract"].lower()
+                    kw_lower = keyword.lower()
+
+                    if scope == 0 and (kw_lower in title_lower or kw_lower in abstract_lower):
+                        all_articles.append(article_data)
+                    elif scope == 1 and kw_lower in title_lower:
+                        all_articles.append(article_data)
+                    elif scope == 2 and kw_lower in abstract_lower:
+                        all_articles.append(article_data)
+                else:
+                    all_articles.append(article_data)
+
             page += 1
-
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP 错误: {e}")
-            print(f"服务器返回内容: {response.text}")
+        except Exception as e:
+            print("请求出错:", e)
             break
-        except requests.exceptions.RequestException as e:
-            print(f"请求发生错误: {e}")
-            break
-        except ValueError: # JSONDecodeError
-            print(f"无法解析返回的 JSON 数据。")
-            print(f"服务器返回内容: {response.text}")
-            break
-
     return all_articles
 
+
 def save_to_csv(articles, filename):
-    """将文章列表保存到 CSV 文件。"""
     if not articles:
         print("没有找到任何文章，无需创建文件。")
         return
-
     try:
-        # 定义CSV文件的表头
-        fieldnames = ["title", "authors", "publication_date", "abstract", "url", "id"]
-        
-        with open(filename, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        # 现在把 abstract 正式加进 CSV
+        fieldnames = ["title", "authors", "year", "pages", "url", "id", "abstract"]
+        with open(filename, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(articles)
-        print(f"\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}")
-
+        print(f"\n成功! {len(articles)} 条记录已保存到 {os.path.abspath(filename)}")
     except IOError as e:
-        print(f"写入文件时发生错误: {e}")
+        print("写入文件时发生 I/O 错误:", e)
+
+
+def display_articles(articles):
+    if not articles:
+        print("未找到任何文章。")
+        return
+    print(f"\n找到 {len(articles)} 篇文章")
+    print("-" * 80)
+    for i, art in enumerate(articles, 1):
+        print(f"{i}. 标题  : {art['title']}")
+        print(f"   作者 : {art['authors']}")
+        print(f"   年份  : {art['year']}")
+        print(f"   页码  : {art['pages']}")
+        print(f"   ID    : {art['id']}")
+        print(f"   摘要  : {art['abstract'][:300]}{'...' if len(art['abstract']) > 300 else ''}")
+        print()
+
 
 if __name__ == "__main__":
-    # 1. 获取用户输入
-    search_keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()
-
-    # 2. 调用函数获取数据
-    articles_found = get_articles(search_keyword if search_keyword else None)
-
-    # 3. 将结果保存到文件
-    if articles_found:
-        if search_keyword:
-            output_filename = f"fed_articles_{search_keyword.replace(' ', '_')}.csv"
-        else:
-            output_filename = "fed_articles_all.csv"
-        save_to_csv(articles_found, output_filename)
+    keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()
+    scope = ask_search_scope()
+    articles = get_articles(keyword, scope)
+    display_articles(articles)
+    if articles:
+        safe = keyword.replace(' ', '_').replace('/', '_') if keyword else "all"
+        save_to_csv(articles, f"fed_articles_{safe}.csv")

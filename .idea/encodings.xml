@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="Encoding" defaultCharsetForPropertiesFiles="UTF-8" />
+  <component name="Encoding" native2AsciiForPropertiesFiles="true" defaultCharsetForPropertiesFiles="UTF-8">
+    <file url="file://$PROJECT_DIR$/../../Onedrive/Work/ICBC/报告/常规报告/量化月报/月度量化预测模型/模型/预测黄金/predict_classification_gold.py" charset="GBK" />
+  </component>
 </project>

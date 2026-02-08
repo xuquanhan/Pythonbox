@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 annotated-types==0.7.0
 anyio==4.9.0
 attrs==25.3.0
@@ -60,3 +61,11 @@ tzdata==2025.2
 urllib3==2.5.0
 websocket-client==1.8.0
 wsproto==1.2.0
+=======
+Requests==2.32.4
+numpy==1.24.3
+pandas==2.0.3
+matplotlib==3.7.1
+scipy==1.10.1
+python-dotenv==1.0.0
+>>>>>>> 0c80f2b00630fd40913e024832ef018e37307d57
