@@ -1,0 +1,30 @@
+# 爬虫配置
+crawler:
+  timeout: 30
+  retry_times: 3
+  sleep_interval: 2  # 爬取间隔，避免被封
+  max_articles: 1000  # 最大文章数
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    Accept-Language: "zh-CN,zh;q=0.8,en-US;q=0.5,en;q=0.3"
+    Connection: "keep-alive"
+
+# 定时任务配置
+scheduler:
+  check_interval: "1h"  # 每小时检查一次
+  max_workers: 3  # 最大并发数
+  notify: false  # 是否发送通知
+
+# 存储配置
+storage:
+  db_path: "data/db/wechat.db"
+  batch_size: 100
+  export_format: "csv"  # 可选: csv, json, excel
+  export_path: "data/processed"
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/wechat_crawler.log"
