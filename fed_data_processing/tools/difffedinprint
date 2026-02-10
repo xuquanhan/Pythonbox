@@ -1,0 +1,306 @@
+[1mdiff --cc Fed_in_Print.py[m
+[1mindex 77f33d5,a9d3f61..0000000[m
+[1m--- a/Fed_in_Print.py[m
+[1m+++ b/Fed_in_Print.py[m
+[36m@@@ -1,142 -1,170 +1,296 @@@[m
+  import requests[m
+  import csv[m
+  import os[m
+[32m+ import re[m
+[32m+ from dotenv import load_dotenv[m
+[32m+ [m
+[32m+ # 加载环境变量[m
+[32m+ load_dotenv()[m
+  [m
+  # --- 配置 ---[m
+[32m++<<<<<<< HEAD[m
+[32m +API_KEY = "2360a68c16b805cf2a02db06372ce22c"[m
+[32m +BASE_URL = "https://fedinprint.org/api"[m
+[32m +# 每页请求多少条记录，最大值似乎是100[m
+[32m +ITEMS_PER_PAGE = 100[m
+[32m +[m
+[32m +def get_articles(keyword=None):[m
+[32m +    """[m
+[32m +    从 Fed in Print API 获取文章数据。[m
+[32m +    如果提供了关键词，则按标题搜索。否则，获取所有文章。[m
+[32m +    """[m
+[32m +    if keyword:[m
+[32m +        print(f"正在搜索关键词为 '{keyword}' 的文章...")[m
+[32m +        endpoint = f"{BASE_URL}/item/search"[m
+[32m +        params = {"title": keyword}[m
+[32m +    else:[m
+[32m +        print("准备获取所有文章...")[m
+[32m +        endpoint = f"{BASE_URL}/item"[m
+[32m +        params = {}[m
+[32m +[m
+[32m +    # 使用 Session 可以复用TCP连接，并保持headers[m
+[32m++=======[m
+[32m+ API_KEY = os.getenv("FED_IN_PRINT_API_KEY")[m
+[32m+ BASE_URL = "https://fedinprint.org/api"[m
+[32m+ ITEMS_PER_PAGE = 100[m
+[32m+ [m
+[32m+ [m
+[32m+ def ask_search_scope() -> int:[m
+[32m+     while True:[m
+[32m+         choice = input([m
+[32m+             "请选择搜索范围：\n"[m
+[32m+             "0 - 标题 + 摘要\n"[m
+[32m+             "1 - 仅标题\n"[m
+[32m+             "2 - 仅摘要\n"[m
+[32m+             "请输入 0 / 1 / 2："[m
+[32m+         ).strip()[m
+[32m+         if choice in {"0", "1", "2"}:[m
+[32m+             return int(choice)[m
+[32m+         print("输入无效，请重新输入。")[m
+[32m+ [m
+[32m+ [m
+[32m+ def extract_year_from_title(title: str) -> str:[m
+[32m+     m = re.search(r'\b(19|20)\d{2}\b', title)[m
+[32m+     return m.group() if m else "N/A"[m
+[32m+ [m
+[32m+ [m
+[32m+ def build_endpoint_and_params(scope: int, keyword: str):[m
+[32m+     if not keyword:[m
+[32m+         return f"{BASE_URL}/item", {}[m
+[32m+     if scope == 0:[m
+[32m+         return f"{BASE_URL}/item/search", {"title": keyword, "abstract": keyword}[m
+[32m+     elif scope == 1:[m
+[32m+         return f"{BASE_URL}/item/search", {"title": keyword}[m
+[32m+     else:  # scope == 2[m
+[32m+         return f"{BASE_URL}/item/search", {"abstract": keyword}[m
+[32m+ [m
+[32m+ [m
+[32m+ def get_articles(keyword: str, scope: int):[m
+[32m+     # 检查API密钥[m
+[32m+     if not API_KEY or API_KEY == "YOUR_API_KEY_HERE":[m
+[32m+         print("错误: 请在.env文件中设置FED_IN_PRINT_API_KEY环境变量")[m
+[32m+         return [][m
+[32m+ [m
+[32m+     endpoint, params = build_endpoint_and_params(scope, keyword)[m
+[32m+     if keyword:[m
+[32m+         scope_desc = ["标题+摘要", "仅标题", "仅摘要"][scope][m
+[32m+         print(f"正在搜索 {scope_desc} 中包含'{keyword}' 的文章..")[m
+[32m+     else:[m
+[32m+         print("准备获取所有文章..")[m
+[32m+ [m
+[32m++>>>>>>> 0c80f2b00630fd40913e024832ef018e37307d57[m
+      session = requests.Session()[m
+      session.headers.update({"X-API-Key": API_KEY})[m
+  [m
+      all_articles = [][m
+      page = 1[m
+[32m++<<<<<<< HEAD[m
+[32m +    [m
+[32m++=======[m
+[32m++>>>>>>> 0c80f2b00630fd40913e024832ef018e37307d57[m
+      while True:[m
+          params['limit'] = ITEMS_PER_PAGE[m
+          params['page'] = page[m
+[31m -[m
+[32m +        [m
+          try:[m
+[32m++<<<<<<< HEAD[m
+[32m +            print(f"正在获取第 {page} 页...")[m
+[32m +            response = session.get(endpoint, params=params, timeout=30)[m
+[32m +            # 检查请求是否成功[m
+[32m +            response.raise_for_status() [m
+[32m +            [m
+[32m +            data = response.json()[m
+[32m +            print(f"API响应数据结构: {type(data)}, keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")[m
+[32m++=======[m
+[32m+             data = session.get(endpoint, params=params, timeout=30).json()[m
+[32m++>>>>>>> 0c80f2b00630fd40913e024832ef018e37307d57[m
+              records = data.get("records", [])[m
+[31m- [m
+              if not records:[m
+                  print("未找到更多记录，获取结束。")[m
+                  break[m
+  [m
+[32m++<<<<<<< HEAD[m
+[32m +            print(f"Records类型: {type(records)}, 长度: {len(records) if isinstance(records, (list, tuple)) else 'N/A'}")[m
+[32m +            if records:[m
+[32m +                print(f"第一条记录类型: {type(records[0])}")[m
+[32m +                if isinstance(records[0], dict):[m
+[32m +                    print(f"第一条记录keys: {list(records[0].keys())}")[m
+[32m +[m
+[32m +            for record in records:[m
+[32m +                # 提取作者名字并合并成一个字符串[m
+[32m +                # 首先检查record是否为字典[m
+[32m +                if not isinstance(record, dict):[m
+[32m +                    print(f"警告: record不是字典类型，而是 {type(record)}，内容: {record}")[m
+[32m +                    # 如果record不是字典，跳过此记录[m
+[32m +                    continue[m
+[32m +                [m
+[32m +                # 处理author字段可能为列表或字典的情况[m
+[32m +                authors_list = record.get("author", [])[m
+[32m +                authors = ""[m
+[32m +                if isinstance(authors_list, list):[m
+[32m +                    # 如果author是列表，遍历每个元素获取名字[m
+[32m +                    authors = ", ".join([author.get("name", "") if isinstance(author, dict) else str(author) for author in authors_list])[m
+[32m +                elif isinstance(authors_list, dict):[m
+[32m +                    # 如果author是字典，直接获取名字[m
+[32m +                    authors = authors_list.get("name", "")[m
+[32m +                else:[m
+[32m +                    # 其他情况，转换为字符串[m
+[32m +                    authors = str(authors_list)[m
+[32m +                [m
+[32m +                # 提取第一个可用的文件链接[m
+[32m +                file_url = ""[m
+[32m +                if record.get("file"):[m
+[32m +                    if isinstance(record["file"], list) and len(record["file"]) > 0:[m
+[32m +                        file_url = record["file"][0].get("fileurl", "")[m
+[32m +                    else:[m
+[32m +                        file_url = str(record["file"]) if "file" in record else ""[m
+[32m +[m
+[32m +                all_articles.append({[m
+[32m +                    "title": record.get("title", "N/A"),[m
+[32m +                    "authors": authors,[m
+[32m +                    "publication_date": record.get("publicationDate", "N/A"), # 注意API返回的字段可能是publicationDate[m
+[32m +                    "abstract": record.get("abstract", "N/A"),[m
+[32m +                    "url": file_url,[m
+[32m +                    "id": record.get("id", "N/A")[m
+[32m +                })[m
+[32m +            [m
+[32m +            page += 1[m
+[32m +[m
+[32m +        except requests.exceptions.HTTPError as e:[m
+[32m +            print(f"HTTP 错误: {e}")[m
+[32m +            print(f"服务器返回内容: {response.text}")[m
+[32m +            break[m
+[32m +        except requests.exceptions.RequestException as e:[m
+[32m +            print(f"请求发生错误: {e}")[m
+[32m +            break[m
+[32m +        except ValueError: # JSONDecodeError[m
+[32m +            print(f"无法解析返回的 JSON 数据。")[m
+[32m +            print(f"服务器返回内容: {response.text}")[m
+[32m +            break[m
+[32m++=======[m
+[32m+             for rec in records:[m
+[32m+                 if not isinstance(rec, dict):[m
+[32m+                     continue[m
+[32m+ [m
+[32m+                 authors_data = rec.get("author", [])[m
+[32m+                 if isinstance(authors_data, list):[m
+[32m+                     authors = ", ".join([m
+[32m+                         a.get("name", "Unknown") if isinstance(a, dict) else str(a)[m
+[32m+                         for a in authors_data[m
+[32m+                     )[m
+[32m+                 else:[m
+[32m+                     authors = str(authors_data) if authors_data else "N/A"[m
+[32m+ [m
+[32m+                 file_url = ""[m
+[32m+                 if isinstance(rec.get("file"), list) and rec["file"]:[m
+[32m+                     file_url = ([m
+[32m+                         rec["file"][0].get("fileurl", "")[m
+[32m+                         if isinstance(rec["file"][0], dict)[m
+[32m+                         else ""[m
+[32m+                     )[m
+[32m+ [m
+[32m+                 pub_date = rec.get("publication_date") or rec.get("publicationDate")[m
+[32m+                 year = pub_date if pub_date else extract_year_from_title(rec.get("title", ""))[m
+[32m+ [m
+[32m+                 article_data = {[m
+[32m+                     "title": rec.get("title", "N/A"),[m
+[32m+                     "authors": authors,[m
+[32m+                     "year": year,[m
+[32m+                     "pages": rec.get("pages", "N/A"),[m
+[32m+                     "url": file_url,[m
+[32m+                     "id": rec.get("id", "N/A"),[m
+[32m+                     "abstract": rec.get("abstract", "N/A"),[m
+[32m+                 }[m
+[32m+ [m
+[32m+                 # 过滤逻辑[m
+[32m+                 if keyword:[m
+[32m+                     title_lower = article_data["title"].lower()[m
+[32m+                     abstract_lower = article_data["abstract"].lower()[m
+[32m+                     kw_lower = keyword.lower()[m
+  [m
+[32m+                     if scope == 0 and (kw_lower in title_lower or kw_lower in abstract_lower):[m
+[32m+                         all_articles.append(article_data)[m
+[32m+                     elif scope == 1 and kw_lower in title_lower:[m
+[32m+                         all_articles.append(article_data)[m
+[32m+                     elif scope == 2 and kw_lower in abstract_lower:[m
+[32m+                         all_articles.append(article_data)[m
+[32m+                 else:[m
+[32m+                     all_articles.append(article_data)[m
+[32m++>>>>>>> 0c80f2b00630fd40913e024832ef018e37307d57[m
+[32m+ [m
+[32m+             page += 1[m
+[32m+         except Exception as e:[m
+[32m+             print("请求出错:", e)[m
+[32m+             break[m
+      return all_articles[m
+  [m
+[31m -[m
+  def save_to_csv(articles, filename):[m
+[32m +    """将文章列表保存到 CSV 文件。"""[m
+      if not articles:[m
+          print("没有找到任何文章，无需创建文件。")[m
+          return[m
+[31m- [m
+      try:[m
+[32m++<<<<<<< HEAD[m
+[32m +        # 定义CSV文件的表头[m
+[32m +        fieldnames = ["title", "authors", "publication_date", "abstract", "url", "id"][m
+[32m +        [m
+[32m +        with open(filename, "w", newline="", encoding="utf-8") as csvfile:[m
+[32m +            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)[m
+[32m +            writer.writeheader()[m
+[32m +            writer.writerows(articles)[m
+[32m +        print(f"\n成功! {len(articles)} 篇文章已保存到文件: {os.path.abspath(filename)}")[m
+[32m +[m
+[32m +    except IOError as e:[m
+[32m +        print(f"写入文件时发生错误: {e}")[m
+[32m +[m
+[32m +if __name__ == "__main__":[m
+[32m +    # 1. 获取用户输入[m
+[32m +    search_keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()[m
+[32m +[m
+[32m +    # 2. 调用函数获取数据[m
+[32m +    articles_found = get_articles(search_keyword if search_keyword else None)[m
+[32m +[m
+[32m +    # 3. 将结果保存到文件[m
+[32m +    if articles_found:[m
+[32m +        if search_keyword:[m
+[32m +            output_filename = f"fed_articles_{search_keyword.replace(' ', '_')}.csv"[m
+[32m +        else:[m
+[32m +            output_filename = "fed_articles_all.csv"[m
+[32m +        save_to_csv(articles_found, output_filename)[m
+[32m++=======[m
+[32m+         # 现在把 abstract 正式加进 CSV[m
+[32m+         fieldnames = ["title", "authors", "year", "pages", "url", "id", "abstract"][m
+[32m+         with open(filename, "w", newline="", encoding="utf-8-sig") as f:[m
+[32m+             writer = csv.DictWriter(f, fieldnames=fieldnames)[m
+[32m+             writer.writeheader()[m
+[32m+             writer.writerows(articles)[m
+[32m+         print(f"\n成功! {len(articles)} 条记录已保存到 {os.path.abspath(filename)}")[m
+[32m+     except IOError as e:[m
+[32m+         print("写入文件时发生 I/O 错误:", e)[m
+[32m+ [m
+[32m+ [m
+[32m+ def display_articles(articles):[m
+[32m+     if not articles:[m
+[32m+         print("未找到任何文章。")[m
+[32m+         return[m
+[32m+     print(f"\n找到 {len(articles)} 篇文章")[m
+[32m+     print("-" * 80)[m
+[32m+     for i, art in enumerate(articles, 1):[m
+[32m+         print(f"{i}. 标题  : {art['title']}")[m
+[32m+         print(f"   作者 : {art['authors']}")[m
+[32m+         print(f"   年份  : {art['year']}")[m
+[32m+         print(f"   页码  : {art['pages']}")[m
+[32m+         print(f"   ID    : {art['id']}")[m
+[32m+         print(f"   摘要  : {art['abstract'][:300]}{'...' if len(art['abstract']) > 300 else ''}")[m
+[32m+         print()[m
+[32m+ [m
+[32m+ [m
+[32m+ if __name__ == "__main__":[m
+[32m+     keyword = input("请输入搜索关键词 (直接按 Enter 获取所有文章): ").strip()[m
+[32m+     scope = ask_search_scope()[m
+[32m+     articles = get_articles(keyword, scope)[m
+[32m+     display_articles(articles)[m
+[32m+     if articles:[m
+[32m+         safe = keyword.replace(' ', '_').replace('/', '_') if keyword else "all"[m
+[31m -        save_to_csv(articles, f"fed_articles_{safe}.csv")[m
+[32m++        save_to_csv(articles, f"fed_articles_{safe}.csv")[m
+[32m++>>>>>>> 0c80f2b00630fd40913e024832ef018e37307d57[m
