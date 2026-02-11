@@ -370,6 +370,91 @@ class DataStorage:
             self.logger.error(f"获取统计信息失败: {str(e)}")
             return {}
     
+    def export_to_word(self, account_name: Optional[str] = None, filename: Optional[str] = None):
+        """导出为Word"""
+        try:
+            articles = self.get_articles(account_name)
+            if not articles:
+                self.logger.warning("没有文章可导出")
+                return None
+            
+            # 创建导出目录
+            export_dir = 'data/processed'
+            os.makedirs(export_dir, exist_ok=True)
+            
+            # 生成文件名
+            if not filename:
+                if account_name:
+                    filename = f"{account_name}_{datetime.now().strftime('%Y%m%d')}.docx"
+                else:
+                    filename = f"all_articles_{datetime.now().strftime('%Y%m%d')}.docx"
+            
+            filepath = os.path.join(export_dir, filename)
+            
+            # 导入python-docx库
+            from docx import Document
+            from docx.shared import Inches
+            
+            # 创建Word文档
+            doc = Document()
+            
+            # 添加标题
+            if account_name:
+                doc.add_heading(f'{account_name} 公众号文章', 0)
+            else:
+                doc.add_heading('微信公众号文章合集', 0)
+            
+            doc.add_paragraph(f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+            doc.add_paragraph(f'文章数量: {len(articles)}')
+            doc.add_page_break()
+            
+            # 为每篇文章创建章节
+            for i, article in enumerate(articles, 1):
+                # 添加文章标题
+                doc.add_heading(f'{i}. {article.get("title", "无标题")}', level=1)
+                
+                # 添加文章元信息
+                meta_info = []
+                if article.get('account_name'):
+                    meta_info.append(f'公众号: {article.get("account_name")}')
+                if article.get('publish_time'):
+                    meta_info.append(f'发布时间: {article.get("publish_time")}')
+                if article.get('author'):
+                    meta_info.append(f'作者: {article.get("author")}')
+                if article.get('reading_count'):
+                    meta_info.append(f'阅读量: {article.get("reading_count")}')
+                if article.get('like_count'):
+                    meta_info.append(f'点赞量: {article.get("like_count")}')
+                if article.get('url'):
+                    meta_info.append(f'原文链接: {article.get("url")}')
+                
+                if meta_info:
+                    doc.add_paragraph(' | '.join(meta_info))
+                
+                # 添加文章内容
+                content = article.get('content', '无内容')
+                # 按换行符分割内容
+                paragraphs = content.split('\n')
+                for para in paragraphs:
+                    if para.strip():
+                        doc.add_paragraph(para.strip())
+                
+                # 添加分页符
+                if i < len(articles):
+                    doc.add_page_break()
+            
+            # 保存文档
+            doc.save(filepath)
+            
+            self.logger.info(f"导出Word成功: {filepath}")
+            return filepath
+        except ImportError:
+            self.logger.error("导出Word失败: 缺少python-docx库，请安装: pip install python-docx")
+            return None
+        except Exception as e:
+            self.logger.error(f"导出Word失败: {str(e)}")
+            return None
+    
     def clear_articles(self, account_name: Optional[str] = None):
         """清空文章数据"""
         try:

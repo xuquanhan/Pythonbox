@@ -6,6 +6,7 @@ pandas==2.2.0
 schedule==1.2.1
 pyyaml==6.0.1
 openpyxl==3.1.5  # Excel导出支持
+python-docx==0.8.11  # Word导出支持
 
 # 可选依赖
 lxml==5.1.0         # 更快速的HTML解析

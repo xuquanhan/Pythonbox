@@ -6,9 +6,10 @@
 
 - **单公众号爬取**：输入公众号名称，自动爬取所有历史文章
 - **批量爬取**：从配置文件读取公众号列表，批量爬取多个公众号
+- **批量添加公众号**：支持连续添加多个公众号，自动去重
 - **定时更新**：定期检查并拉取新的推送
 - **数据存储**：使用 SQLite 数据库存储文章内容
-- **数据导出**：支持导出为 CSV、JSON、Excel 格式
+- **数据导出**：支持导出为 CSV、JSON、Excel、Word 格式
 - **自动去重**：避免重复爬取相同文章
 - **错误处理**：完善的错误处理和重试机制
 - **日志管理**：详细的日志记录
@@ -29,6 +30,7 @@ wechat_crawler/
 │   ├── config.yaml    # 主配置文件
 │   └── accounts.yaml  # 公众号列表
 ├── scripts/           # 运行脚本
+│   ├── main.py         # 主脚本（整合所有功能）
 │   ├── single_crawl.py # 单公众号爬取
 │   └── batch_crawl.py  # 批量爬取
 ├── utils/             # 工具函数
@@ -47,7 +49,57 @@ wechat_crawler/
 pip install -r requirements.txt
 ```
 
-### 2. 配置公众号列表
+### 2. 主脚本使用（推荐）
+
+现在我们提供了一个整合所有功能的主脚本 `main.py`，您可以通过它来执行所有操作：
+
+#### 2.1 交互式模式
+
+```bash
+python scripts/main.py
+```
+
+进入交互式菜单后，您可以选择以下操作：
+
+1. 单公众号爬取
+2. 批量爬取所有公众号
+3. 显示公众号列表
+4. 添加公众号
+5. 批量添加公众号
+6. 删除公众号
+7. 启动定时任务
+8. 显示统计信息
+9. 退出
+
+#### 2.2 命令行模式
+
+```bash
+# 单公众号爬取（支持导出为csv/json/excel/word）
+python scripts/main.py --action single --name "人民日报" --export word
+
+# 批量添加公众号
+python scripts/main.py --action batch_add
+
+# 批量爬取
+python scripts/main.py --action crawl
+
+# 显示公众号列表
+python scripts/main.py --action list
+
+# 添加公众号
+python scripts/main.py --action add
+
+# 删除公众号
+python scripts/main.py --action remove
+
+# 启动定时任务
+python scripts/main.py --action start
+
+# 显示统计信息
+python scripts/main.py --action stats
+```
+
+### 3. 配置公众号列表
 
 编辑 `config/accounts.yaml` 文件，添加要爬取的公众号：
 
@@ -61,31 +113,15 @@ accounts:
     last_update: ""
 ```
 
-### 3. 单公众号爬取
+### 4. 批量添加公众号
+
+使用主脚本的 `batch_add` 功能，您可以连续添加多个公众号：
 
 ```bash
-# 交互式模式
-python scripts/single_crawl.py
-
-# 命令行模式
-python scripts/single_crawl.py --name "人民日报" --export csv
+python scripts/main.py --action batch_add
 ```
 
-### 4. 批量爬取
-
-```bash
-# 交互式模式
-python scripts/batch_crawl.py
-
-# 命令行模式
-python scripts/batch_crawl.py --action crawl
-```
-
-### 5. 启动定时任务
-
-```bash
-python scripts/batch_crawl.py --action start
-```
+然后按照提示输入公众号名称，输入 'exit' 或留空退出添加模式。
 
 ## ⚙️ 配置说明
 
@@ -181,6 +217,14 @@ $ python scripts/batch_crawl.py --action list
 
 ## 🔧 命令行参数
 
+### main.py（推荐）
+
+| 参数 | 说明 |
+|------|------|
+| --action | 操作 (list/add/batch_add/remove/crawl/start/stats/single) |
+| --name | 公众号名称（用于single操作） |
+| --export | 导出格式 (csv/json/excel/word)（用于single操作） |
+
 ### single_crawl.py
 
 | 参数 | 说明 |
@@ -241,6 +285,6 @@ MIT License
 
 ---
 
-**版本**：1.0.0
-**更新时间**：2026-02-10
+**版本**：1.1.0
+**更新时间**：2026-02-11
 **作者**：AI Assistant

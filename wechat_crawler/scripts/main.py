@@ -140,6 +140,8 @@ def crawl_single_account(account_name, export_format=None):
                 export_path = storage.export_to_json(account_name)
             elif export_format == 'excel':
                 export_path = storage.export_to_excel(account_name)
+            elif export_format == 'word':
+                export_path = storage.export_to_word(account_name)
             
             if export_path:
                 logger.info(f"数据已导出到: {export_path}")
@@ -153,6 +155,33 @@ def crawl_single_account(account_name, export_format=None):
         logger.error(f"爬取失败: {str(e)}")
         return False
 
+def batch_add_accounts(scheduler):
+    """批量添加公众号"""
+    print("\n📋 批量添加公众号")
+    print("-" * 60)
+    print("请输入公众号名称，输入 'exit' 或留空退出")
+    print("-" * 60)
+    
+    added_count = 0
+    
+    while True:
+        name = input("公众号名称: ").strip()
+        
+        if not name or name.lower() == 'exit':
+            break
+        
+        success = scheduler.add_account(name)
+        if success:
+            added_count += 1
+            print(f"✅ 添加成功！")
+        else:
+            print(f"❌ 添加失败，可能已存在")
+    
+    if added_count > 0:
+        print(f"\n✅ 批量添加完成，共添加了 {added_count} 个公众号")
+    else:
+        print("\nℹ️  未添加任何公众号")
+
 def main():
     """主函数"""
     setup_logging()
@@ -160,9 +189,9 @@ def main():
     
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='微信公众号爬取工具')
-    parser.add_argument('--action', choices=['list', 'add', 'remove', 'crawl', 'start', 'stats', 'single'], help='操作')
+    parser.add_argument('--action', choices=['list', 'add', 'batch_add', 'remove', 'crawl', 'start', 'stats', 'single'], help='操作')
     parser.add_argument('--name', type=str, help='公众号名称')
-    parser.add_argument('--export', choices=['csv', 'json', 'excel'], help='导出格式')
+    parser.add_argument('--export', choices=['csv', 'json', 'excel', 'word'], help='导出格式')
     args = parser.parse_args()
     
     # 根据命令行参数执行操作
@@ -173,6 +202,9 @@ def main():
         elif args.action == 'add':
             scheduler = Scheduler()
             add_account(scheduler)
+        elif args.action == 'batch_add':
+            scheduler = Scheduler()
+            batch_add_accounts(scheduler)
         elif args.action == 'remove':
             scheduler = Scheduler()
             remove_account(scheduler)
@@ -206,10 +238,11 @@ def main():
         print("2. 批量爬取所有公众号")
         print("3. 显示公众号列表")
         print("4. 添加公众号")
-        print("5. 删除公众号")
-        print("6. 启动定时任务")
-        print("7. 显示统计信息")
-        print("8. 退出")
+        print("5. 批量添加公众号")
+        print("6. 删除公众号")
+        print("7. 启动定时任务")
+        print("8. 显示统计信息")
+        print("9. 退出")
         
         choice = input("请输入操作序号: ").strip()
         
@@ -223,6 +256,7 @@ def main():
                     print("1. CSV")
                     print("2. JSON")
                     print("3. Excel")
+                    print("4. Word")
                     format_choice = input("请输入格式序号: ").strip()
                     if format_choice == '1':
                         export_format = 'csv'
@@ -230,6 +264,8 @@ def main():
                         export_format = 'json'
                     elif format_choice == '3':
                         export_format = 'excel'
+                    elif format_choice == '4':
+                        export_format = 'word'
                 success = crawl_single_account(name, export_format)
                 if success:
                     print(f"✅ 爬取成功！")
@@ -248,13 +284,16 @@ def main():
             add_account(scheduler)
         elif choice == '5':
             scheduler = Scheduler()
-            remove_account(scheduler)
+            batch_add_accounts(scheduler)
         elif choice == '6':
             scheduler = Scheduler()
-            start_schedule(scheduler)
+            remove_account(scheduler)
         elif choice == '7':
-            show_statistics()
+            scheduler = Scheduler()
+            start_schedule(scheduler)
         elif choice == '8':
+            show_statistics()
+        elif choice == '9':
             print("退出工具...")
             break
         else:
