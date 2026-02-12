@@ -1,0 +1,19 @@
+# 核心依赖
+requests==2.32.4
+beautifulsoup4==4.12.3
+selenium==4.16.0
+pandas==2.2.0
+schedule==1.2.1
+pyyaml==6.0.1
+openpyxl==3.1.5  # Excel导出支持
+python-docx==0.8.11  # Word导出支持
+
+# 可选依赖
+lxml==5.1.0         # 更快速的HTML解析
+fake_useragent==1.5.1  # 随机User-Agent
+webdriver-manager==4.0.1  # 自动管理WebDriver
+
+# 开发依赖
+pytest==7.4.3
+black==23.12.1
+flake8==6.1.0
