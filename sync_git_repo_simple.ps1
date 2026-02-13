@@ -1,5 +1,23 @@
 #!/usr/bin/env powershell
 
+<#
+.SYNOPSIS
+    Git repository sync tool
+.DESCRIPTION
+    Syncs local Git repository with remote
+.EXAMPLE
+    .\sync_git_repo_simple.ps1
+#>
+
+# Set error handling
+$ErrorActionPreference = "Stop"
+
+# Set encoding
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+
+# Main script
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "Git Repository Sync Script" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan
@@ -61,6 +79,7 @@ Write-Host ""
 Write-Host "2. Pulling remote changes..." -ForegroundColor Yellow
 Write-Host ""
 
+# Temporarily set error action to continue to handle git errors gracefully
 $oldErrorAction = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 
@@ -68,10 +87,12 @@ try {
     $pullOutput = git pull origin main 2>&1
     $pullExitCode = $LASTEXITCODE
     
+    # Output the result
     if ($pullOutput) {
         Write-Host $pullOutput
     }
     
+    # Check the exit code and output
     if ($pullExitCode -ne 0) {
         Write-Host "[WARNING] Pull operation returned exit code: $pullExitCode" -ForegroundColor Yellow
         Write-Host "[INFO] This may be due to network issues. Continuing with local operations..." -ForegroundColor Gray
@@ -87,6 +108,7 @@ try {
     Write-Host "[WARNING] Exception during pull: $($_.Exception.Message)" -ForegroundColor Yellow
     Write-Host "[INFO] Continuing with local operations..." -ForegroundColor Gray
 } finally {
+    # Restore original error action preference
     $ErrorActionPreference = $oldErrorAction
 }
 
@@ -141,108 +163,105 @@ Write-Host ""
 Write-Host "4. Verifying sync status..." -ForegroundColor Yellow
 Write-Host ""
 
-# Get git status information
-try {
-    $logOutput = git log --oneline -1
-    Write-Host "Latest commit:"
-    Write-Host $logOutput
-    
-    $branchOutput = git branch -vv
-    Write-Host ""
-    Write-Host "Branch status:"
-    Write-Host $branchOutput
-    
-    $statusOutput = git status -sb
-    Write-Host ""
-    Write-Host "Status summary:"
-    Write-Host $statusOutput
-} catch {
-    Write-Host "[ERROR] Error verifying status: $($_.Exception.Message)" -ForegroundColor Red
+# 分析同步状态
+$aheadCount = 0
+$behindCount = 0
+$unstagedCount = 0
+$untrackedCount = 0
+
+# 获取 git 状态信息
+$logOutput = git log --oneline -1
+Write-Host "Latest commit:"
+Write-Host $logOutput
+
+$branchOutput = git branch -vv
+Write-Host ""
+Write-Host "Branch status:"
+Write-Host $branchOutput
+
+$statusOutput = git status -sb
+Write-Host ""
+Write-Host "Status summary:"
+Write-Host $statusOutput
+
+# 提取 ahead/behind 数量
+if ($branchOutput -match "ahead (\d+)") {
+    $aheadCount = $matches[1]
+}
+if ($branchOutput -match "behind (\d+)") {
+    $behindCount = $matches[1]
 }
 
-# Show detailed sync status
+# 提取未暂存和未跟踪文件数量
+if ($statusOutput -match "\d+ modified") {
+    $unstagedCount = $matches[0] -replace " modified", ""
+}
+if ($statusOutput -match "\d+ untracked") {
+    $untrackedCount = $matches[0] -replace " untracked", ""
+}
+
+# 显示详细的同步状态
 Write-Host ""
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "SYNC STATUS SUMMARY" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan
 
-# Detect current device type
+# 检测当前设备类型
 $deviceType = "Unknown"
-if ($env:COMPUTERNAME -match "DESKTOP" -or $env:USERPROFILE -match "Desktop") {
+if ($env:COMPUTERNAME -like "*DESKTOP*" -or $env:USERPROFILE -like "*Desktop*") {
     $deviceType = "Desktop"
-} elseif ($env:COMPUTERNAME -match "LAPTOP" -or $env:USERPROFILE -match "Laptop") {
+} elseif ($env:COMPUTERNAME -like "*LAPTOP*" -or $env:USERPROFILE -like "*Laptop*") {
     $deviceType = "Laptop"
 }
 
 Write-Host "[DEVICE] Current device: $deviceType" -ForegroundColor Gray
-Write-Host ""
 
-# Check git status for sync analysis
+# 分析同步状态
 Write-Host "[STATUS] Detailed Sync Analysis:" -ForegroundColor Cyan
 Write-Host "----------------------------------" -ForegroundColor Cyan
 
-try {
-    # Check if local is ahead of remote
-    $aheadOutput = git log origin/main..HEAD --oneline
-    $aheadCount = ($aheadOutput | Measure-Object -Line).Lines
+if ($aheadCount -eq 0 -and $behindCount -eq 0 -and $unstagedCount -eq 0 -and $untrackedCount -eq 0) {
+    Write-Host "[GITHUB] GitHub: Fully synchronized" -ForegroundColor Green
+    Write-Host "[Device] $($deviceType): Fully synchronized" -ForegroundColor Green
+    Write-Host "[OVERALL] All devices: Completely synchronized" -ForegroundColor Green
+    Write-Host "[INFO]    No pending changes or commits" -ForegroundColor Gray
+} else {
+    $syncIssues = @()
     
-    # Check if local is behind remote
-    $behindOutput = git log HEAD..origin/main --oneline
-    $behindCount = ($behindOutput | Measure-Object -Line).Lines
-    
-    # Check for unstaged changes
-    $unstagedOutput = git status --porcelain | Where-Object { $_ -match '^[MADRCU] ' }
-    $unstagedCount = ($unstagedOutput | Measure-Object -Line).Lines
-    
-    # Check for untracked files
-    $untrackedOutput = git status --porcelain | Where-Object { $_ -match '^\?\? ' }
-    $untrackedCount = ($untrackedOutput | Measure-Object -Line).Lines
-    
-    if ($aheadCount -eq 0 -and $behindCount -eq 0 -and $unstagedCount -eq 0 -and $untrackedCount -eq 0) {
-        Write-Host "[GITHUB] GitHub: Fully synchronized" -ForegroundColor Green
-        Write-Host "[Device] ${deviceType}: Fully synchronized" -ForegroundColor Green
-        Write-Host "[OVERALL] All devices: Completely synchronized" -ForegroundColor Green
-        Write-Host "[INFO]    No pending changes or commits" -ForegroundColor Gray
+    if ($aheadCount -gt 0) {
+        Write-Host "[GITHUB] GitHub: Partially synchronized" -ForegroundColor Yellow
+        Write-Host "[Device] $($deviceType): Has latest changes" -ForegroundColor Green
+        Write-Host "[LOCAL]  Local commits: $aheadCount commit(s) ready to push" -ForegroundColor Yellow
+        $syncIssues += "$aheadCount commit(s) not pushed to GitHub"
+    } elseif ($behindCount -gt 0) {
+        Write-Host "[GITHUB] GitHub: Has latest changes" -ForegroundColor Green
+        Write-Host "[Device] $($deviceType): Partially synchronized" -ForegroundColor Yellow
+        Write-Host "[REMOTE] Remote commits: $behindCount commit(s) ready to pull" -ForegroundColor Yellow
+        $syncIssues += "$behindCount commit(s) not pulled from GitHub"
     } else {
-        $syncIssues = @()
-        
-        if ($aheadCount -gt 0) {
-            Write-Host "[GITHUB] GitHub: Partially synchronized" -ForegroundColor Yellow
-            Write-Host "[Device] ${deviceType}: Has latest changes" -ForegroundColor Green
-            Write-Host "[LOCAL]  Local commits: $aheadCount commit(s) ready to push" -ForegroundColor Yellow
-            $syncIssues += "$aheadCount commit(s) not pushed to GitHub"
-        } elseif ($behindCount -gt 0) {
-            Write-Host "[GITHUB] GitHub: Has latest changes" -ForegroundColor Green
-            Write-Host "[Device] ${deviceType}: Partially synchronized" -ForegroundColor Yellow
-            Write-Host "[REMOTE] Remote commits: $behindCount commit(s) ready to pull" -ForegroundColor Yellow
-            $syncIssues += "$behindCount commit(s) not pulled from GitHub"
-        } else {
-            Write-Host "[GITHUB] GitHub: Synchronized" -ForegroundColor Green
-            Write-Host "[Device] ${deviceType}: Partially synchronized" -ForegroundColor Yellow
-        }
+        Write-Host "[GITHUB] GitHub: Synchronized" -ForegroundColor Green
+        Write-Host "[Device] $($deviceType): Partially synchronized" -ForegroundColor Yellow
         
         if ($unstagedCount -gt 0) {
-            Write-Host "[LOCAL]  Modified files on ${deviceType}: $unstagedCount file(s) (not staged for commit)" -ForegroundColor Yellow
-            $syncIssues += "$unstagedCount modified file(s) on $deviceType (not staged)"
+            Write-Host "[FILES]  Unstaged files: $unstagedCount file(s) need staging" -ForegroundColor Yellow
+            $syncIssues += "$unstagedCount unstaged file(s)"
         }
         if ($untrackedCount -gt 0) {
-            Write-Host "[LOCAL]  New files on ${deviceType}: $untrackedCount file(s) (not tracked by Git)" -ForegroundColor Yellow
-            $syncIssues += "$untrackedCount new file(s) on $deviceType (not tracked)"
-        }
-        
-        if ($syncIssues.Count -gt 0) {
-            Write-Host "[OVERALL] Sync status: Partially synchronized" -ForegroundColor Yellow
-            Write-Host "[ISSUES]  Pending synchronization issues:" -ForegroundColor Red
-            foreach ($issue in $syncIssues) {
-                Write-Host "          - $issue" -ForegroundColor Red
-            }
+            Write-Host "[FILES]  Untracked files: $untrackedCount file(s) need tracking" -ForegroundColor Yellow
+            $syncIssues += "$untrackedCount untracked file(s)"
         }
     }
-} catch {
-    Write-Host "[ERROR] Error analyzing sync status: $($_.Exception.Message)" -ForegroundColor Red
+    
+    if ($syncIssues.Count -gt 0) {
+        Write-Host "[OVERALL] Sync status: Partially synchronized" -ForegroundColor Yellow
+        Write-Host "[ISSUES]  Pending synchronization issues:" -ForegroundColor Red
+        foreach ($issue in $syncIssues) {
+            Write-Host "          - $issue" -ForegroundColor Red
+        }
+    }
 }
 
-# Show terminal sync status
+# 显示终端同步状态
 Write-Host "----------------------------------" -ForegroundColor Cyan
 Write-Host "[TERMINAL] Current terminal status:" -ForegroundColor Cyan
 
@@ -261,22 +280,22 @@ if ($pushFailed) {
 
 Write-Host "====================================" -ForegroundColor Cyan
 
-# Push failure reminders
+# 推送失败提醒
 if ($pushFailed) {
     Write-Host "" -ForegroundColor Red
     Write-Host "====================================" -ForegroundColor Red
-    Write-Host "[ALERT] WARNING: PUSH FAILED - PLEASE ATTENTION!" -ForegroundColor Red
+    Write-Host "[ALERT] ⚠️  PUSH FAILED - PLEASE ATTENTION! ⚠️" -ForegroundColor Red
     Write-Host "====================================" -ForegroundColor Red
     
-    # Three consecutive reminders
+    # 连续三次提醒
     for ($i = 1; $i -le 3; $i++) {
-        Write-Host "[ALERT] WARNING: REMINDER $i/3: Push was NOT successful!" -ForegroundColor Red
-        Write-Host "[ALERT] WARNING: Your changes are committed locally but not pushed to GitHub!" -ForegroundColor Yellow
-        Write-Host "[ALERT] WARNING: Please run 'git push' manually when network is available!" -ForegroundColor Yellow
+        Write-Host "[ALERT] ⚠️  REMINDER $i/3: Push was NOT successful! ⚠️" -ForegroundColor Red
+        Write-Host "[ALERT] ⚠️  Your changes are committed locally but not pushed to GitHub! ⚠️" -ForegroundColor Yellow
+        Write-Host "[ALERT] ⚠️  Please run 'git push' manually when network is available! ⚠️" -ForegroundColor Yellow
         Write-Host "" -ForegroundColor Yellow
     }
     
-    Write-Host "[ALERT] WARNING: SYNC STATUS: Local and GitHub are NOT synchronized!" -ForegroundColor Red
+    Write-Host "[ALERT] ⚠️  SYNC STATUS: Local and GitHub are NOT synchronized! ⚠️" -ForegroundColor Red
     Write-Host "====================================" -ForegroundColor Red
 }
 
