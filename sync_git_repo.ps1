@@ -112,23 +112,38 @@ try {
 Write-Host ""
 Write-Host "2. Pulling remote changes..." -ForegroundColor Yellow
 Write-Host ""
+
+# Temporarily set error action to continue to handle git errors gracefully
+$oldErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+
 try {
-    $pullOutput = git pull origin main
-    Write-Host $pullOutput
+    $pullOutput = git pull origin main 2>&1
+    $pullExitCode = $LASTEXITCODE
     
-    if ($pullOutput -match "CONFLICT") {
-        Write-Host "[ERROR] Conflicts detected! Please resolve manually." -ForegroundColor Red
-        exit 1
+    # Output the result
+    if ($pullOutput) {
+        Write-Host $pullOutput
     }
     
-    if ($pullOutput -match "Already up to date") {
-        Write-Host "[OK] Repository is synchronized!" -ForegroundColor Green
+    # Check the exit code and output
+    if ($pullExitCode -ne 0) {
+        Write-Host "[WARNING] Pull operation returned exit code: $pullExitCode" -ForegroundColor Yellow
+        Write-Host "[INFO] This may be due to network issues. Continuing with local operations..." -ForegroundColor Gray
+    } elseif ($pullOutput -match "CONFLICT") {
+        Write-Host "[ERROR] Conflicts detected! Please resolve manually." -ForegroundColor Red
+        exit 1
+    } elseif ($pullOutput -match "Already up to date") {
+        Write-Host "[OK] Repository is already up to date!" -ForegroundColor Green
     } else {
         Write-Host "[OK] Successfully pulled changes!" -ForegroundColor Green
     }
 } catch {
-    Write-Host "[ERROR] Error pulling changes: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
+    Write-Host "[WARNING] Exception during pull: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "[INFO] Continuing with local operations..." -ForegroundColor Gray
+} finally {
+    # Restore original error action preference
+    $ErrorActionPreference = $oldErrorAction
 }
 
 # 3. Push changes
