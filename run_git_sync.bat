@@ -34,4 +34,13 @@ if %errorlevel% neq 0 (
 echo.
 echo [INFO] Git synchronization completed.
 echo.
+
+rem Show recent commit history to verify sync status
+echo ====================================
+echo Recent Commits (last 10)
+echo ====================================
+git log --oneline -10
+echo.
+echo [INFO] Check above commits to verify Desktop, Laptop, and GitHub are in sync.
+echo.
 pause
