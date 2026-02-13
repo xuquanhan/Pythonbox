@@ -63,17 +63,37 @@ class WeChatCrawler:
                     
                     # 尝试使用系统已安装的msedgedriver
                     try:
-                        self.driver = webdriver.Edge(options=edge_options)
-                        self.logger.info("使用系统已安装的msedgedriver成功")
+                        # 首先尝试用户指定的路径 C:\msedgedriver
+                        import os
+                        from selenium.webdriver.edge.service import Service as EdgeService
+                        custom_driver_path = r"C:\msedgedriver\msedgedriver.exe"
+                        if os.path.exists(custom_driver_path):
+                            edge_service = EdgeService(executable_path=custom_driver_path)
+                            self.driver = webdriver.Edge(service=edge_service, options=edge_options)
+                            self.logger.info(f"使用自定义路径msedgedriver成功: {custom_driver_path}")
+                        else:
+                            # 尝试系统默认路径
+                            self.driver = webdriver.Edge(options=edge_options)
+                            self.logger.info("使用系统默认msedgedriver成功")
                     except Exception as e:
-                        self.logger.warning(f"系统msedgedriver启动失败: {str(e)}")
-                        # 尝试使用EdgeChromiumDriverManager安装驱动
+                        self.logger.warning(f"本地msedgedriver启动失败: {str(e)}")
+                        # 尝试使用EdgeChromiumDriverManager安装驱动（仅在网络可用时）
                         try:
-                            self.driver = webdriver.Edge(
-                                executable_path=EdgeChromiumDriverManager().install(),
-                                options=edge_options
-                            )
-                            self.logger.info("使用EdgeChromiumDriverManager安装驱动成功")
+                            # 检查网络连接
+                            import urllib.request
+                            try:
+                                urllib.request.urlopen('https://www.google.com', timeout=3)
+                                network_available = True
+                            except:
+                                network_available = False
+                            
+                            if network_available:
+                                edge_service = EdgeService(executable_path=EdgeChromiumDriverManager().install())
+                                self.driver = webdriver.Edge(service=edge_service, options=edge_options)
+                                self.logger.info("使用EdgeChromiumDriverManager安装驱动成功")
+                            else:
+                                self.logger.error("网络不可用，无法下载Edge驱动")
+                                raise Exception("网络不可用，且本地未找到msedgedriver")
                         except Exception as e2:
                             self.logger.error(f"EdgeChromiumDriverManager安装失败: {str(e2)}")
                             # 回退到Chrome
@@ -327,31 +347,58 @@ class WeChatCrawler:
                     self.logger.warning(f"滚动页面失败: {str(e)}")
                     break
             
-            # 提取文章信息
-            article_items = driver.find_elements(By.CSS_SELECTOR, '.news-box .wx-rb')
+            # 提取文章信息 - 使用调试中找到的正确选择器
+            # 文章列表在 .news-list li 中
+            article_items = driver.find_elements(By.CSS_SELECTOR, '.news-list li')
+            
+            if not article_items:
+                self.logger.warning("未找到文章列表，尝试其他选择器")
+                # 尝试其他可能的选择器
+                article_items = driver.find_elements(By.CSS_SELECTOR, '.txt-box h3')
+                self.logger.info(f"使用备选选择器找到 {len(article_items)} 个标题")
             
             for item in article_items:
                 try:
                     # 提取标题
-                    title_elem = item.find_element(By.CSS_SELECTOR, '.txt-box h3')
-                    title = title_elem.text.strip()
+                    title = ""
+                    url = ""
+                    try:
+                        title_elem = item.find_element(By.CSS_SELECTOR, 'h3')
+                        title = title_elem.text.strip()
+                        # 提取链接
+                        link_elem = title_elem.find_element(By.TAG_NAME, 'a')
+                        url = link_elem.get_attribute('href')
+                    except:
+                        # 如果item本身就是标题元素
+                        title = item.text.strip()
+                        try:
+                            url = item.find_element(By.XPATH, '..').get_attribute('href')
+                        except:
+                            pass
                     
-                    # 提取链接
-                    link_elem = title_elem.find_element(By.TAG_NAME, 'a')
-                    url = link_elem.get_attribute('href')
+                    if not title:
+                        continue
                     
-                    # 提取发布时间
-                    time_elem = item.find_element(By.CSS_SELECTOR, '.s-p')
-                    publish_time = time_elem.text.strip()
+                    # 提取发布时间 - 在 .s-p 中
+                    publish_time = ""
+                    try:
+                        time_elem = item.find_element(By.CSS_SELECTOR, '.s-p')
+                        publish_time = time_elem.text.strip()
+                    except:
+                        pass
                     
                     # 提取摘要
-                    summary_elem = item.find_element(By.CSS_SELECTOR, '.txt-box p')
-                    summary = summary_elem.text.strip()
+                    summary = ""
+                    try:
+                        summary_elem = item.find_element(By.CSS_SELECTOR, 'p')
+                        summary = summary_elem.text.strip()
+                    except:
+                        pass
                     
                     # 提取封面图片
                     cover_image = None
                     try:
-                        img_elem = item.find_element(By.CSS_SELECTOR, '.img-box img')
+                        img_elem = item.find_element(By.CSS_SELECTOR, 'img')
                         cover_image = img_elem.get_attribute('src')
                     except:
                         pass
@@ -364,6 +411,7 @@ class WeChatCrawler:
                         'cover_image': cover_image
                     }
                     articles.append(article)
+                    self.logger.info(f"找到文章: {title[:50]}...")
                     
                 except Exception as e:
                     self.logger.warning(f"解析文章项失败: {str(e)}")
