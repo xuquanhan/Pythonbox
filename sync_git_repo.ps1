@@ -1,5 +1,13 @@
 #!/usr/bin/env powershell
 
+# Set UTF-8 encoding for console output
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Configure Git for cross-platform compatibility
+& git config --local core.autocrlf true 2>$null
+& git config --local core.quotepath false 2>$null
+
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "Git Repository Sync Script" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan

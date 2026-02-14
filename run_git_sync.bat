@@ -1,10 +1,17 @@
 @echo off
+chcp 65001 >nul
 title Git Sync Tool
 
 echo ====================================
 echo Git Repository Sync Tool
 echo ====================================
 echo.
+
+rem Configure Git to handle line endings and Unicode properly
+git config --local core.autocrlf true >nul 2>&1
+git config --local core.quotepath false >nul 2>&1
+git config --local i18n.logoutputencoding utf-8 >nul 2>&1
+git config --local i18n.commitencoding utf-8 >nul 2>&1
 
 rem Check if PowerShell is available
 powershell -Command "Write-Host 'PowerShell check passed'" >nul 2>&1
