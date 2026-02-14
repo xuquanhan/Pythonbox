@@ -74,7 +74,19 @@ try {
     
     if ($pullExitCode -ne 0) {
         Write-Host "[WARNING] Pull operation returned exit code: $pullExitCode" -ForegroundColor Yellow
-        Write-Host "[INFO] This may be due to network issues. Continuing with local operations..." -ForegroundColor Gray
+        Write-Host "[INFO] This may be due to network issues." -ForegroundColor Gray
+        Write-Host "[HINT]  Please check if Clash is running and try again!" -ForegroundColor Cyan
+        $openClash = Read-Host "Do you want to open Clash now? (Y/N)"
+        if ($openClash -eq "Y" -or $openClash -eq "y") {
+            try {
+                Start-Process "Clash for Windows"
+                Write-Host "[INFO] Clash is starting... Please wait a moment and re-run this script." -ForegroundColor Green
+                exit 0
+            } catch {
+                Write-Host "[ERROR] Failed to start Clash. Please open it manually." -ForegroundColor Red
+            }
+        }
+        Write-Host "[INFO] Continuing with local operations..." -ForegroundColor Gray
     } elseif ($pullOutput -match "CONFLICT") {
         Write-Host "[ERROR] Conflicts detected! Please resolve manually." -ForegroundColor Red
         exit 1
@@ -124,6 +136,17 @@ try {
             $pushFailed = $false
         } else {
             Write-Host "[WARNING] Push failed. Network issue?" -ForegroundColor Yellow
+            Write-Host "[HINT]  Please check if Clash is running and try again!" -ForegroundColor Cyan
+            $openClash = Read-Host "Do you want to open Clash now? (Y/N)"
+            if ($openClash -eq "Y" -or $openClash -eq "y") {
+                try {
+                    Start-Process "Clash for Windows"
+                    Write-Host "[INFO] Clash is starting... Please wait a moment and re-run this script." -ForegroundColor Green
+                    exit 0
+                } catch {
+                    Write-Host "[ERROR] Failed to start Clash. Please open it manually." -ForegroundColor Red
+                }
+            }
             Write-Host "[INFO] Changes committed locally but not pushed." -ForegroundColor Gray
             $pushFailed = $true
             $pushErrorMessage = $pushError
