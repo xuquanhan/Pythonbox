@@ -247,10 +247,130 @@ class DataStorage:
             self.logger.error(f"获取文章失败: {str(e)}")
             return None
     
-    def export_to_csv(self, account_name: Optional[str] = None, filename: Optional[str] = None):
+    def save_article(self, article: Dict):
+        """保存单篇文章"""
+        try:
+            conn = self._connect()
+            cursor = conn.cursor()
+            
+            # 检查是否已存在
+            cursor.execute('''
+                SELECT id FROM articles WHERE url = ?
+            ''', (str(article.get('url', '')),))
+            existing = cursor.fetchone()
+            
+            # 确保所有字段都是字符串类型
+            account_id = str(article.get('account_id', ''))
+            account_name = str(article.get('account_name', ''))
+            title = str(article.get('title', ''))
+            content = str(article.get('content', article.get('summary', '')))
+            url = str(article.get('url', ''))
+            publish_time = str(article.get('publish_time', ''))
+            cover_image = str(article.get('cover_image', ''))
+            reading_count = int(article.get('reading_count', 0))
+            like_count = int(article.get('like_count', 0))
+            crawl_time = str(article.get('crawl_time', datetime.now().isoformat()))
+            
+            if not existing:
+                # 插入新文章
+                cursor.execute('''
+                    INSERT INTO articles (
+                        account_id, account_name, title, content, url, 
+                        publish_time, cover_image, reading_count, like_count, crawl_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    account_id, account_name, title, content, url, 
+                    publish_time, cover_image, reading_count, like_count, crawl_time
+                ))
+                conn.commit()
+                self.logger.info(f"保存文章成功: {title[:30]}...")
+            else:
+                # 检查是否需要更新content字段
+                cursor.execute('''
+                    SELECT content FROM articles WHERE url = ?
+                ''', (url,))
+                existing_content = cursor.fetchone()
+                
+                if existing_content and not existing_content[0] and content:
+                    # 如果现有content为空，且新content不为空，则更新
+                    cursor.execute('''
+                        UPDATE articles 
+                        SET content = ?, crawl_time = ? 
+                        WHERE url = ?
+                    ''', (content, crawl_time, url))
+                    conn.commit()
+                    self.logger.info(f"更新文章内容: {title[:30]}...")
+                else:
+                    self.logger.info(f"文章已存在，跳过: {article.get('title', '')[:30]}...")
+            
+            conn.close()
+        except Exception as e:
+            self.logger.error(f"保存文章失败: {str(e)}")
+    
+    def get_all_articles(self) -> List[Dict]:
+        """获取所有文章"""
+        try:
+            conn = self._connect()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM articles
+                ORDER BY publish_time DESC
+            ''')
+            
+            articles = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            return articles
+        except Exception as e:
+            self.logger.error(f"获取所有文章失败: {str(e)}")
+            return []
+    
+    def get_latest_article_by_account(self, account_name: str) -> Optional[Dict]:
+        """获取指定公众号的最新文章"""
+        try:
+            conn = self._connect()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT * FROM articles 
+                WHERE account_name = ?
+                ORDER BY publish_time DESC
+                LIMIT 1
+            ''', (account_name,))
+            
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+        except Exception as e:
+            self.logger.error(f"获取最新文章失败: {str(e)}")
+            return None
+    
+    def article_exists(self, url: str) -> bool:
+        """检查文章是否已存在"""
+        try:
+            conn = self._connect()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id FROM articles WHERE url = ?
+            ''', (url,))
+            
+            exists = cursor.fetchone() is not None
+            conn.close()
+            return exists
+        except Exception as e:
+            self.logger.error(f"检查文章是否存在失败: {str(e)}")
+            return False
+    
+    def export_to_csv(self, account_name: Optional[str] = None, filename: Optional[str] = None, articles: Optional[List[Dict]] = None):
         """导出为CSV"""
         try:
-            articles = self.get_articles(account_name)
+            # 如果没有传入articles，则从数据库获取
+            if articles is None:
+                articles = self.get_articles(account_name)
+            
             if not articles:
                 self.logger.warning("没有文章可导出")
                 return None
@@ -266,6 +386,10 @@ class DataStorage:
                 else:
                     filename = f"all_articles_{datetime.now().strftime('%Y%m%d')}.csv"
             
+            # 确保文件名有正确的扩展名
+            if not filename.endswith('.csv'):
+                filename += '.csv'
+            
             filepath = os.path.join(export_dir, filename)
             
             # 导出为CSV
@@ -278,10 +402,13 @@ class DataStorage:
             self.logger.error(f"导出CSV失败: {str(e)}")
             return None
     
-    def export_to_json(self, account_name: Optional[str] = None, filename: Optional[str] = None):
+    def export_to_json(self, account_name: Optional[str] = None, filename: Optional[str] = None, articles: Optional[List[Dict]] = None):
         """导出为JSON"""
         try:
-            articles = self.get_articles(account_name)
+            # 如果没有传入articles，则从数据库获取
+            if articles is None:
+                articles = self.get_articles(account_name)
+            
             if not articles:
                 self.logger.warning("没有文章可导出")
                 return None
@@ -297,6 +424,10 @@ class DataStorage:
                 else:
                     filename = f"all_articles_{datetime.now().strftime('%Y%m%d')}.json"
             
+            # 确保文件名有正确的扩展名
+            if not filename.endswith('.json'):
+                filename += '.json'
+            
             filepath = os.path.join(export_dir, filename)
             
             # 导出为JSON
@@ -309,10 +440,13 @@ class DataStorage:
             self.logger.error(f"导出JSON失败: {str(e)}")
             return None
     
-    def export_to_excel(self, account_name: Optional[str] = None, filename: Optional[str] = None):
+    def export_to_excel(self, account_name: Optional[str] = None, filename: Optional[str] = None, articles: Optional[List[Dict]] = None):
         """导出为Excel"""
         try:
-            articles = self.get_articles(account_name)
+            # 如果没有传入articles，则从数据库获取
+            if articles is None:
+                articles = self.get_articles(account_name)
+            
             if not articles:
                 self.logger.warning("没有文章可导出")
                 return None
@@ -327,6 +461,10 @@ class DataStorage:
                     filename = f"{account_name}_{datetime.now().strftime('%Y%m%d')}.xlsx"
                 else:
                     filename = f"all_articles_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            
+            # 确保文件名有正确的扩展名
+            if not filename.endswith('.xlsx'):
+                filename += '.xlsx'
             
             filepath = os.path.join(export_dir, filename)
             

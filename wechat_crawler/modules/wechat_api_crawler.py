@@ -169,13 +169,32 @@ class WeChatAPICrawler:
                 logger.error(f"获取文章详情失败: {response.status_code}")
                 return None
             
-            # 从页面中提取阅读量、点赞数等信息
-            # 注意：微信文章页面使用JavaScript动态加载，可能需要Selenium
-            # 这里简化处理，只返回基本信息
+            # 从页面中提取文章内容
+            html_content = response.text
+            
+            # 尝试从HTML中提取文章正文
+            # 微信文章通常在特定的div中
+            import re
+            # 查找文章正文区域
+            content_match = re.search(r'<div class="rich_media_content.*?>(.*?)</div>', html_content, re.DOTALL)
+            if content_match:
+                content_html = content_match.group(1)
+                # 移除HTML标签
+                text_content = re.sub(r'<[^>]+>', '', content_html)
+                # 清理空白字符
+                text_content = re.sub(r'\s+', ' ', text_content).strip()
+                # 限制内容长度，避免过大
+                text_content = text_content[:10000]  # 限制10000字符
+            else:
+                # 如果没有找到，使用整个HTML的纯文本
+                text_content = re.sub(r'<[^>]+>', '', html_content)
+                text_content = re.sub(r'\s+', ' ', text_content).strip()
+                text_content = text_content[:5000]  # 限制5000字符
             
             detail = {
                 'url': article_url,
-                'html_content': response.text[:1000]  # 只保存前1000字符
+                'html_content': html_content,
+                'content': text_content
             }
             
             return detail

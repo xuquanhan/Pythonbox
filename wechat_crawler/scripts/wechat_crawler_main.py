@@ -8,15 +8,17 @@ import os
 import sys
 import json
 import logging
+import time
 from datetime import datetime
 from typing import List, Dict
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from modules.wechat_auto_login import WeChatAutoLogin
+from modules.wechat_auto_login_simple import WeChatAutoLoginSimple
 from modules.wechat_api_crawler import WeChatAPICrawler
-from modules.storage import Storage
+from modules.storage import DataStorage as Storage
+from modules.word_exporter import WordExporter
 
 # 配置文件路径
 CONFIG_DIR = 'config'
@@ -31,7 +33,7 @@ def setup_logging():
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('logs/main_api.log', encoding='utf-8'),
+            logging.FileHandler('logs/wechat_crawler.log', encoding='utf-8'),
             logging.StreamHandler()
         ]
     )
@@ -128,9 +130,9 @@ def add_accounts(accounts: List[Dict]) -> List[Dict]:
     return accounts
 
 
-def get_fakeid_for_accounts(auto_login: WeChatAutoLogin, accounts: List[Dict]) -> List[Dict]:
+def get_fakeid_for_accounts(auto_login: WeChatAutoLoginSimple, accounts: List[Dict]) -> List[Dict]:
     """
-    为没有fakeid的公众号获取fakeid
+    为没有fakeid的公众号获取fakeid（全自动API方式）
     """
     updated_accounts = []
     
@@ -145,7 +147,8 @@ def get_fakeid_for_accounts(auto_login: WeChatAutoLogin, accounts: List[Dict]) -
         
         print(f"\n正在获取 {name} 的fakeid...")
         try:
-            fakeid = auto_login.search_account(name)
+            # 使用API方式自动获取fakeid
+            fakeid = auto_login.get_fakeid_by_api(name)
             if fakeid:
                 account['fakeid'] = fakeid
                 print(f"  [✓] {name} 获取成功: {fakeid}")
@@ -156,7 +159,7 @@ def get_fakeid_for_accounts(auto_login: WeChatAutoLogin, accounts: List[Dict]) -
         
         updated_accounts.append(account)
         
-        # 添加延迟
+        # 添加延迟，避免请求过快
         time.sleep(2)
     
     return updated_accounts
@@ -164,7 +167,7 @@ def get_fakeid_for_accounts(auto_login: WeChatAutoLogin, accounts: List[Dict]) -
 
 def crawl_accounts(api_crawler: WeChatAPICrawler, accounts: List[Dict], storage: Storage):
     """
-    爬取所有公众号的文章
+    爬取所有公众号的文章（支持增量爬取）
     """
     all_articles = []
     
@@ -181,24 +184,63 @@ def crawl_accounts(api_crawler: WeChatAPICrawler, accounts: List[Dict], storage:
         print(f"{'='*60}")
         
         try:
+            # 获取该公众号的最新文章时间（用于增量爬取）
+            latest_article = storage.get_latest_article_by_account(name)
+            latest_time = latest_article.get('publish_time', '') if latest_article else ''
+            
+            if latest_time:
+                print(f"[INFO] 数据库中最新的文章时间: {latest_time}")
+                print(f"[INFO] 将只获取更新的文章...")
+            
             # 获取文章
             articles = api_crawler.get_all_articles(fakeid, max_count=20)
             
             if articles:
-                print(f"[✓] 成功获取 {len(articles)} 篇文章")
+                # 过滤已存在的文章（增量爬取）
+                new_articles = []
+                updated_articles = []
                 
-                # 添加公众号信息
                 for article in articles:
                     article['account_name'] = name
                     article['crawl_time'] = datetime.now().isoformat()
+                    
+                    # 获取文章详情（完整内容）
+                    try:
+                        detail = api_crawler.get_article_detail(article.get('url', ''))
+                        if detail and 'content' in detail:
+                            # 使用API返回的content字段
+                            if detail['content']:
+                                article['content'] = detail['content']
+                    except Exception as e:
+                        logging.warning(f"获取文章详情失败: {e}")
+                    
+                    # 检查是否已存在
+                    if not storage.article_exists(article.get('url', '')):
+                        new_articles.append(article)
+                    else:
+                        # 对已存在的文章也调用save_article，以便更新content字段
+                        updated_articles.append(article)
                 
-                all_articles.extend(articles)
+                # 保存新文章
+                if new_articles:
+                    print(f"[✓] 成功获取 {len(articles)} 篇文章，其中 {len(new_articles)} 篇是新文章")
+                    
+                    all_articles.extend(new_articles)
+                    
+                    # 保存到数据库
+                    for article in new_articles:
+                        storage.save_article(article)
+                    
+                    print(f"[✓] 已保存 {len(new_articles)} 篇新文章到数据库")
+                else:
+                    print(f"[✓] 成功获取 {len(articles)} 篇文章，但没有新文章")
                 
-                # 保存到数据库
-                for article in articles:
-                    storage.save_article(article)
-                
-                print(f"[✓] 已保存到数据库")
+                # 更新已存在文章的content字段
+                if updated_articles:
+                    print(f"[INFO] 正在更新 {len(updated_articles)} 篇已存在文章的内容...")
+                    for article in updated_articles:
+                        storage.save_article(article)
+                    print(f"[✓] 已更新 {len(updated_articles)} 篇文章的内容")
             else:
                 print(f"[!] 未获取到文章")
                 
@@ -275,7 +317,7 @@ def main():
     print("开始自动登录")
     print("="*60)
     
-    auto_login = WeChatAutoLogin(SESSION_FILE)
+    auto_login = WeChatAutoLoginSimple(SESSION_FILE)
     
     if not auto_login.login():
         print("\n[✗] 登录失败，程序退出")
@@ -316,18 +358,35 @@ def main():
     print("1. JSON")
     print("2. CSV")
     print("3. Excel")
-    print("4. 不导出")
+    print("4. Word文档（按公众号分类）- 仅新文章")
+    print("5. Word文档（按公众号分类）- 所有文章")
+    print("6. 不导出")
     
-    export_choice = input("\n请输入选项 (1-4): ").strip()
+    export_choice = input("\n请输入选项 (1-6): ").strip()
     
-    format_map = {
-        '1': 'json',
-        '2': 'csv',
-        '3': 'excel'
-    }
-    
-    if export_choice in format_map:
-        export_data(storage, format_map[export_choice])
+    if export_choice == '1':
+        export_data(storage, 'json')
+    elif export_choice == '2':
+        export_data(storage, 'csv')
+    elif export_choice == '3':
+        export_data(storage, 'excel')
+    elif export_choice == '4':
+        # Word导出 - 仅新文章
+        if all_articles:
+            word_exporter = WordExporter()
+            word_exporter.export_all_to_word(all_articles)
+        else:
+            print("[!] 没有新文章需要导出为Word")
+    elif export_choice == '5':
+        # Word导出 - 所有文章
+        print("\n[INFO] 正在从数据库加载所有文章...")
+        all_saved_articles = storage.get_all_articles()
+        if all_saved_articles:
+            print(f"[INFO] 共加载 {len(all_saved_articles)} 篇文章")
+            word_exporter = WordExporter()
+            word_exporter.export_all_to_word(all_saved_articles)
+        else:
+            print("[!] 数据库中没有文章")
     else:
         print("跳过导出")
     
