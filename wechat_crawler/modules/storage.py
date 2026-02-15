@@ -40,6 +40,7 @@ class DataStorage:
                     account_id TEXT,
                     account_name TEXT,
                     title TEXT,
+                    summary TEXT,
                     content TEXT,
                     url TEXT UNIQUE,
                     publish_time TEXT,
@@ -51,6 +52,15 @@ class DataStorage:
                     FOREIGN KEY (account_id) REFERENCES accounts(account_id)
                 )
             ''')
+            
+            # 检查是否需要添加summary字段（兼容旧数据库）
+            try:
+                cursor.execute('SELECT summary FROM articles LIMIT 1')
+            except sqlite3.OperationalError:
+                # summary字段不存在，添加它
+                self.logger.info("正在升级数据库，添加summary字段...")
+                cursor.execute('ALTER TABLE articles ADD COLUMN summary TEXT')
+                self.logger.info("数据库升级完成")
             
             conn.commit()
             conn.close()
@@ -117,13 +127,14 @@ class DataStorage:
                         if not existing:
                             cursor.execute('''
                                 INSERT INTO articles (
-                                    account_id, account_name, title, content, url, 
+                                    account_id, account_name, title, summary, content, url, 
                                     publish_time, cover_image, reading_count, like_count, crawl_time
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ''', (
                                 article.get('account_id', ''),
                                 article.get('account_name', ''),
                                 article.get('title', ''),
+                                article.get('summary', ''),
                                 article.get('content', ''),
                                 article.get('url', ''),
                                 article.get('publish_time', ''),
@@ -263,7 +274,8 @@ class DataStorage:
             account_id = str(article.get('account_id', ''))
             account_name = str(article.get('account_name', ''))
             title = str(article.get('title', ''))
-            content = str(article.get('content', article.get('summary', '')))
+            summary = str(article.get('summary', ''))
+            content = str(article.get('content', ''))
             url = str(article.get('url', ''))
             publish_time = str(article.get('publish_time', ''))
             cover_image = str(article.get('cover_image', ''))
@@ -275,11 +287,11 @@ class DataStorage:
                 # 插入新文章
                 cursor.execute('''
                     INSERT INTO articles (
-                        account_id, account_name, title, content, url, 
+                        account_id, account_name, title, summary, content, url, 
                         publish_time, cover_image, reading_count, like_count, crawl_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    account_id, account_name, title, content, url, 
+                    account_id, account_name, title, summary, content, url, 
                     publish_time, cover_image, reading_count, like_count, crawl_time
                 ))
                 conn.commit()

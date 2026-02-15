@@ -200,19 +200,42 @@ def crawl_accounts(api_crawler: WeChatAPICrawler, accounts: List[Dict], storage:
                 new_articles = []
                 updated_articles = []
                 
-                for article in articles:
+                for i, article in enumerate(articles):
                     article['account_name'] = name
                     article['crawl_time'] = datetime.now().isoformat()
                     
-                    # 获取文章详情（完整内容）
-                    try:
-                        detail = api_crawler.get_article_detail(article.get('url', ''))
-                        if detail and 'content' in detail:
-                            # 使用API返回的content字段
-                            if detail['content']:
+                    # 确保summary字段存在（从文章列表API获取的digest字段）
+                    if 'summary' not in article or not article['summary']:
+                        article['summary'] = article.get('digest', '')
+                    
+                    # 获取文章详情（完整内容）- 只对新文章或没有content的文章获取详情
+                    url = article.get('url', '')
+                    existing_article = storage.get_article_by_url(url)
+                    
+                    # 如果是新文章，或者已有文章没有content，才获取详情
+                    should_fetch_detail = not existing_article or not existing_article.get('content')
+                    
+                    if should_fetch_detail:
+                        try:
+                            print(f"  正在获取第 {i+1}/{len(articles)} 篇文章详情...", end=' ')
+                            detail = api_crawler.get_article_detail(url)
+                            if detail and detail.get('content'):
+                                # 使用API返回的content字段
                                 article['content'] = detail['content']
-                    except Exception as e:
-                        logging.warning(f"获取文章详情失败: {e}")
+                                # 保存正文中的图片列表
+                                if detail.get('content_images'):
+                                    article['content_images'] = detail['content_images']
+                                print(f"✓ (内容长度: {len(detail['content'])})")
+                            else:
+                                print("✗ (未能获取内容)")
+                        except Exception as e:
+                            print(f"✗ ({str(e)[:50]})")
+                            logging.warning(f"获取文章详情失败: {e}")
+                    else:
+                        # 使用数据库中已有的content
+                        article['content'] = existing_article.get('content', '')
+                        article['content_images'] = existing_article.get('content_images', [])
+                        article['summary'] = existing_article.get('summary', '')
                     
                     # 检查是否已存在
                     if not storage.article_exists(article.get('url', '')):

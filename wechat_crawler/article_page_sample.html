@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html class="">
+  <head>
+    <meta name="wechat-enable-text-zoom-em" content="true">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=0,viewport-fit=cover">
+<link rel="shortcut icon" type="image/x-icon" href="//res.wx.qq.com/a/wx_fed/assets/res/NTI4MWU5.ico" reportloaderror>
+<link rel="mask-icon" href="//res.wx.qq.com/a/wx_fed/assets/res/MjliNWVm.svg" color="#4C4C4C" reportloaderror>
+<link rel="apple-touch-icon-precomposed" href="//res.wx.qq.com/a/wx_fed/assets/res/OTE0YTAw.png" reportloaderror>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="format-detection" content="telephone=no">
+<meta name="referrer" content="origin-when-cross-origin">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script  nonce="" reportloaderror>try{document.getElementsByTagName('html').item(0).style.webkitTextSizeAdjust=JSON.parse(window.__wxWebEnv.getEnv()).fontScale+'%'}catch(e){}</script>
+<script type="text/javascript" nonce="" reportloaderror>
+  window.logs = { pagetime: {} };
+  window.logs.pagetime['html_begin'] = (+new Date());
+  window.LANG = "";
+</script>
+
+    
+    <script type="text/javascript" nonce="" reportloaderror>
+  
+  
+  var WX_BJ_REPORT = window.WX_BJ_REPORT || {};
+  (function(_) {
+    if (_.BadJs) {
+      return;
+    }
+   
+    var BADJS_WIN_ERR = 'BadjsWindowError';
+    var extend = function(source, destination) {
+      for (var property in destination) {
+        source[property] = destination[property]
+      }
+      return source
+    }
+    
+    _.BadJs = {
+      uin: 0,
+      mid: "",
+      bizid: 5,
+      view: "wap",
+      _cache: {},
+      _info: {},
+      _hookCallback: null,
+      ignorePath: true,
+      throw: function(e, extData) {
+        this.onError(e, extData);
+        throw e;
+      },
+     
+     
+      onError: function(e, extData) {
+        try {
+         
+          if (e.BADJS_EXCUTED == true) {
+            return;
+          }
+          e.BADJS_EXCUTED = true;
+          var data = errToData(e);
+          data.uin = this.uin;
+          data.mid = this.mid;
+          data.view = this.view;
+          data.bizid = this.bizid;
+          data.cmdb_module = 'mmbizwap';
+         
+          if (!!extData) {
+            data = extend(data, extData);
+          }
+         
+          if (data.cid) {
+            data.key = "[" + data.cid + "]:" + data.key;
+          }
+          if (data.key.includes('Failed to fetch dynamically imported module')) {
+            data.key = 'Failed to fetch dynamically imported module';
+          }
+          if (window.biz) {
+            data.msg += ` || https://mp.weixin.qq.com/s?__biz=${window.biz}&mid=${window.mid}&idx=${window.idx}&sn=${window.sn}&scene=${window.source} || sec_open=${!!window.__second_open__}`;
+          }
+          if (data._info) {
+            if (Object.prototype.toString.call(data._info) == "[object Object]") {
+              data.msg += " || info:" + JSON.stringify(data._info);
+            } else if (Object.prototype.toString.call(data._info) == "[object String]") {
+              data.msg += " || info:" + data._info;
+            } else {
+              data.msg += " || info:" + data._info;
+            }
+          }
+          if (typeof this._hookCallback == "function") {
+            if (this._hookCallback(data) === false) {
+              return
+            }
+          }
+          this._send(data);
+
+          if (e.error) {
+            data.bizid = 20307;
+            data.key = e.error.name || data.name;
+            this._send(data);
+          }
+          return _.BadJs;
+        } catch (e) {
+          console.error(e);
+        }
+      },
+      winErr: function(event) {
+        if (event.error && event.error.BADJS_EXCUTED) {
+          return;
+        }
+        if (event.type === 'unhandledrejection') {
+          if (event.reason instanceof Error) {
+            var e = event.reason || {};
+            _.BadJs.onError(createError(event.type, e.message || "", e.sourceURL || "", e.line || "", e.column || "", event.reason));
+          } else {
+            var message = typeof event.reason === 'object' ? JSON.stringify(event.reason) : event.reason;
+            _.BadJs.onError(createError(event.type, message, "", "", "", event.reason));
+          }
+        } else {
+          _.BadJs.onError(createError(BADJS_WIN_ERR, event.message, event.filename, event.lineno, event.colno, event.error));
+        }
+      },
+      init: function(uin, mid, view) {
+        this.uin = uin || this.uin;
+        this.mid = mid || this.mid;
+        this.view = view || this.view;
+        return _.BadJs;
+      },
+     
+      hook: function(fn) {
+        this._hookCallback = fn;
+        return _.BadJs;
+      },
+      _send: function(data) {
+       
+        

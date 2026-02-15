@@ -145,8 +145,7 @@ class WeChatAPICrawler:
     
     def get_article_detail(self, article_url: str) -> Optional[Dict]:
         """
-        获取文章详情（阅读量、点赞数等）
-        注意：这需要访问文章页面，不是通过API
+        获取文章详情（使用API方式/requests）
         
         Args:
             article_url: 文章链接
@@ -160,10 +159,14 @@ class WeChatAPICrawler:
             # 使用requests获取文章页面
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Cookie": self.cookie
+                "Cookie": self.cookie,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Referer": "https://mp.weixin.qq.com/"
             }
             
-            response = requests.get(article_url, headers=headers, timeout=30)
+            # 使用适当的超时时间
+            response = requests.get(article_url, headers=headers, timeout=20)
             
             if response.status_code != 200:
                 logger.error(f"获取文章详情失败: {response.status_code}")
@@ -173,32 +176,52 @@ class WeChatAPICrawler:
             html_content = response.text
             
             # 尝试从HTML中提取文章正文
-            # 微信文章通常在特定的div中
             import re
-            # 查找文章正文区域
-            content_match = re.search(r'<div class="rich_media_content.*?>(.*?)</div>', html_content, re.DOTALL)
+            
+            text_content = ""
+            content_images = []
+            
+            # 方法1: 查找 #js_content
+            content_match = re.search(r'<div[^>]*id=["\']js_content["\'][^>]*>(.*?)</div>\s*(?:<script|</div>|</body>)', html_content, re.DOTALL | re.IGNORECASE)
+            
+            if not content_match:
+                # 方法2: 查找 rich_media_content
+                content_match = re.search(r'<div[^>]*class=["\']rich_media_content[^"\']*["\'][^>]*>(.*?)</div>\s*(?:<script|</div>|</body>)', html_content, re.DOTALL | re.IGNORECASE)
+            
             if content_match:
                 content_html = content_match.group(1)
-                # 移除HTML标签
+                
+                # 提取正文中的图片
+                img_tags = re.findall(r'<img[^>]+data-src=["\']([^"\']+)["\']', content_html, re.IGNORECASE)
+                if not img_tags:
+                    img_tags = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', content_html, re.IGNORECASE)
+                
+                for img_url in img_tags:
+                    if img_url.startswith('http'):
+                        content_images.append(img_url)
+                
+                # 移除HTML标签获取纯文本
                 text_content = re.sub(r'<[^>]+>', '', content_html)
                 # 清理空白字符
                 text_content = re.sub(r'\s+', ' ', text_content).strip()
-                # 限制内容长度，避免过大
-                text_content = text_content[:10000]  # 限制10000字符
-            else:
-                # 如果没有找到，使用整个HTML的纯文本
-                text_content = re.sub(r'<[^>]+>', '', html_content)
-                text_content = re.sub(r'\s+', ' ', text_content).strip()
-                text_content = text_content[:5000]  # 限制5000字符
+                # 限制内容长度
+                text_content = text_content[:10000]
             
             detail = {
                 'url': article_url,
-                'html_content': html_content,
-                'content': text_content
+                'content': text_content,
+                'content_images': content_images
             }
             
+            logger.info(f"获取文章详情成功: 文字长度 {len(text_content)}, 图片数量 {len(content_images)}")
             return detail
             
+        except requests.exceptions.Timeout:
+            logger.warning(f"获取文章详情超时: {article_url}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"获取文章详情请求失败: {e}")
+            return None
         except Exception as e:
             logger.error(f"获取文章详情失败: {e}")
             return None

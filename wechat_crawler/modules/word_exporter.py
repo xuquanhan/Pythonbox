@@ -6,6 +6,8 @@ Word文档导出模块
 
 import os
 import re
+import io
+import requests
 from datetime import datetime
 from typing import List, Dict, Optional
 from docx import Document
@@ -41,6 +43,33 @@ class WordExporter:
         folder_path = os.path.join(self.base_dir, folder_name)
         os.makedirs(folder_path, exist_ok=True)
         return folder_path
+    
+    def _download_image(self, image_url: str) -> Optional[bytes]:
+        """
+        下载图片
+        
+        Args:
+            image_url: 图片URL
+            
+        Returns:
+            图片二进制数据或None
+        """
+        if not image_url:
+            return None
+        
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            }
+            response = requests.get(image_url, headers=headers, timeout=30)
+            if response.status_code == 200:
+                return response.content
+            else:
+                logger.warning(f"下载图片失败，状态码: {response.status_code}, URL: {image_url[:60]}...")
+                return None
+        except Exception as e:
+            logger.warning(f"下载图片失败: {e}, URL: {image_url[:60]}...")
+            return None
     
     def export_article_to_word(self, article: Dict, account_folder: str) -> Optional[str]:
         """
@@ -80,6 +109,22 @@ class WordExporter:
             # 添加分隔线
             doc.add_paragraph("=" * 50)
             
+            # 添加封面图片
+            cover_image = article.get('cover_image', '')
+            if cover_image:
+                image_data = self._download_image(cover_image)
+                if image_data:
+                    try:
+                        image_stream = io.BytesIO(image_data)
+                        doc.add_heading('封面图片', level=2)
+                        doc.add_picture(image_stream, width=Inches(5.0))
+                        last_paragraph = doc.paragraphs[-1]
+                        last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        doc.add_paragraph()  # 添加空行
+                    except Exception as e:
+                        logger.warning(f"插入封面图片失败: {e}")
+                        doc.add_paragraph(f"[封面图片: {cover_image}]")
+            
             # 添加摘要
             summary = article.get('summary', '')
             if summary:
@@ -88,6 +133,7 @@ class WordExporter:
             
             # 添加内容
             content = article.get('content', '')
+            
             if content:
                 doc.add_heading('正文', level=2)
                 # 处理内容中的换行
@@ -95,6 +141,27 @@ class WordExporter:
                 for para in paragraphs:
                     if para.strip():
                         doc.add_paragraph(para.strip())
+            else:
+                doc.add_heading('正文', level=2)
+                doc.add_paragraph('[正文内容为空，仅获取到摘要]')
+            
+            # 添加正文中的图片
+            content_images = article.get('content_images', [])
+            if content_images:
+                doc.add_heading('文章配图', level=2)
+                for i, img_url in enumerate(content_images[:10], 1):  # 最多插入10张图片
+                    image_data = self._download_image(img_url)
+                    if image_data:
+                        try:
+                            image_stream = io.BytesIO(image_data)
+                            doc.add_paragraph(f"图片 {i}:")
+                            doc.add_picture(image_stream, width=Inches(5.0))
+                            last_paragraph = doc.paragraphs[-1]
+                            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            doc.add_paragraph()  # 添加空行
+                        except Exception as e:
+                            logger.warning(f"插入正文图片失败: {e}")
+                            doc.add_paragraph(f"[图片 {i}: {img_url}]")
             
             # 添加爬取信息
             doc.add_paragraph("=" * 50)
