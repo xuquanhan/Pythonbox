@@ -56,7 +56,7 @@ class WeChatAPICrawler:
             "count": str(count),
             "query": "",
             "fakeid": fakeid,
-            "type": "9",
+            "type": "9",  # 使用默认类型
         }
         
         try:
@@ -166,7 +166,7 @@ class WeChatAPICrawler:
             }
             
             # 使用适当的超时时间
-            response = requests.get(article_url, headers=headers, timeout=20)
+            response = requests.get(article_url, headers=headers, timeout=30)
             
             if response.status_code != 200:
                 logger.error(f"获取文章详情失败: {response.status_code}")
@@ -175,45 +175,172 @@ class WeChatAPICrawler:
             # 从页面中提取文章内容
             html_content = response.text
             
-            # 尝试从HTML中提取文章正文
-            import re
-            
             text_content = ""
             content_images = []
+            extraction_method = "none"
             
-            # 方法1: 查找 #js_content
-            content_match = re.search(r'<div[^>]*id=["\']js_content["\'][^>]*>(.*?)</div>\s*(?:<script|</div>|</body>)', html_content, re.DOTALL | re.IGNORECASE)
-            
-            if not content_match:
+            # 尝试使用BeautifulSoup解析HTML
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(html_content, 'html.parser')
+                
+                # 方法1: 查找 #js_content
+                js_content = soup.find('div', id='js_content')
+                if js_content:
+                    extraction_method = "js_content"
+                    logger.info("使用方法1: 查找 #js_content")
+                
                 # 方法2: 查找 rich_media_content
-                content_match = re.search(r'<div[^>]*class=["\']rich_media_content[^"\']*["\'][^>]*>(.*?)</div>\s*(?:<script|</div>|</body>)', html_content, re.DOTALL | re.IGNORECASE)
+                if not js_content:
+                    rich_media_content = soup.find('div', class_='rich_media_content')
+                    if rich_media_content:
+                        js_content = rich_media_content
+                        extraction_method = "rich_media_content"
+                        logger.info("使用方法2: 查找 .rich_media_content")
+                
+                # 方法3: 查找 article 标签
+                if not js_content:
+                    article_tag = soup.find('article')
+                    if article_tag:
+                        js_content = article_tag
+                        extraction_method = "article_tag"
+                        logger.info("使用方法3: 查找 <article> 标签")
+                
+                # 方法4: 查找 main 标签
+                if not js_content:
+                    main_tag = soup.find('main')
+                    if main_tag:
+                        js_content = main_tag
+                        extraction_method = "main_tag"
+                        logger.info("使用方法4: 查找 <main> 标签")
+                
+                # 方法5: 查找 content 相关的标签
+                if not js_content:
+                    content_tags = soup.find_all(['div', 'section'], class_=lambda x: x and ('content' in x.lower() or 'article' in x.lower()))
+                    for tag in content_tags:
+                        if tag and len(tag.get_text(strip=True)) > 100:
+                            js_content = tag
+                            extraction_method = "content_related"
+                            logger.info("使用方法5: 查找 content 相关标签")
+                            break
+                
+                if js_content:
+                    # 提取正文中的图片
+                    img_tags = js_content.find_all('img')
+                    logger.info(f"找到 {len(img_tags)} 个图片标签")
+                    
+                    for img in img_tags:
+                        # 尝试多种图片URL属性
+                        img_url = img.get('data-src')
+                        if not img_url:
+                            img_url = img.get('src')
+                        if not img_url:
+                            img_url = img.get('data-srcset')
+                        if not img_url:
+                            img_url = img.get('srcset')
+                        
+                        if img_url:
+                            # 处理多个图片URL的情况
+                            if ',' in img_url:
+                                img_url = img_url.split(',')[0].strip()
+                            # 处理URL中的大小参数
+                            if '?' in img_url:
+                                img_url = img_url.split('?')[0]
+                            
+                            # 处理相对路径
+                            if not img_url.startswith(('http://', 'https://')):
+                                if img_url.startswith('//'):
+                                    img_url = 'https:' + img_url
+                                elif img_url.startswith('/'):
+                                    img_url = 'https://mp.weixin.qq.com' + img_url
+                            
+                            # 验证图片URL
+                            if img_url.startswith(('http://', 'https://')):
+                                # 去重
+                                if img_url not in content_images:
+                                    content_images.append(img_url)
+                    
+                    # 移除HTML标签获取纯文本
+                    text_content = js_content.get_text(separator='\n', strip=True)
+                    # 清理空白字符
+                    import re
+                    text_content = re.sub(r'\s+', ' ', text_content).strip()
+                    # 移除多余的空白行
+                    text_content = re.sub(r'\n+', '\n', text_content)
+                    # 不限制内容长度，确保完整提取
+                    logger.info(f"提取到内容长度: {len(text_content)} 字符")
+                else:
+                    # 方法6: 尝试获取整个body内容作为备选
+                    body = soup.find('body')
+                    if body:
+                        extraction_method = "body_fallback"
+                        logger.info("使用方法6: 获取整个 <body> 内容")
+                        text_content = body.get_text(separator='\n', strip=True)
+                        text_content = re.sub(r'\s+', ' ', text_content).strip()
+                        text_content = re.sub(r'\n+', '\n', text_content)
+                        logger.info(f"备选方法提取到内容长度: {len(text_content)} 字符")
+            except ImportError:
+                logger.warning("缺少BeautifulSoup库，使用正则表达式方法提取内容")
+                # 直接使用正则表达式方法
+                pass
             
-            if content_match:
-                content_html = content_match.group(1)
+            # 内容验证和增强
+            if not text_content or len(text_content) < 200:
+                logger.warning(f"提取的内容过短: {len(text_content)} 字符，方法: {extraction_method}")
+                # 尝试使用正则表达式作为最后手段
+                import re
                 
-                # 提取正文中的图片
-                img_tags = re.findall(r'<img[^>]+data-src=["\']([^"\']+)["\']', content_html, re.IGNORECASE)
-                if not img_tags:
-                    img_tags = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', content_html, re.IGNORECASE)
+                # 尝试多种正则表达式模式
+                patterns = [
+                    r'<div[^>]*id=["\']js_content["\'][^>]*>(.*?)</div>',
+                    r'<div[^>]*class=["\']rich_media_content[^"\']*["\'][^>]*>(.*?)</div>',
+                    r'<article[^>]*>(.*?)</article>',
+                    r'<main[^>]*>(.*?)</main>',
+                    r'<div[^>]*class=["\']content[^"\']*["\'][^>]*>(.*?)</div>'
+                ]
                 
-                for img_url in img_tags:
-                    if img_url.startswith('http'):
-                        content_images.append(img_url)
-                
-                # 移除HTML标签获取纯文本
-                text_content = re.sub(r'<[^>]+>', '', content_html)
-                # 清理空白字符
-                text_content = re.sub(r'\s+', ' ', text_content).strip()
-                # 限制内容长度
-                text_content = text_content[:10000]
+                for pattern in patterns:
+                    content_match = re.search(pattern, html_content, re.DOTALL | re.IGNORECASE)
+                    if content_match:
+                        content_html = content_match.group(1)
+                        
+                        # 提取图片
+                        img_urls = re.findall(r'<img[^>]+(?:data-src|src)=["\']([^"\']+)["\']', content_html, re.IGNORECASE)
+                        for img_url in img_urls:
+                            if img_url.startswith(('http://', 'https://')):
+                                if img_url not in content_images:
+                                    content_images.append(img_url)
+                            elif img_url.startswith('//'):
+                                full_img_url = 'https:' + img_url
+                                if full_img_url not in content_images:
+                                    content_images.append(full_img_url)
+                        
+                        # 提取文本
+                        temp_content = re.sub(r'<[^>]+>', '', content_html)
+                        temp_content = re.sub(r'\s+', ' ', temp_content).strip()
+                        temp_content = re.sub(r'\n+', '\n', temp_content)
+                        
+                        if len(temp_content) > len(text_content):
+                            text_content = temp_content
+                            extraction_method = "regex_fallback"
+                            logger.info(f"使用正则表达式回退方法，提取到内容长度: {len(text_content)} 字符")
+                            break
+            
+            # 最终内容验证
+            if not text_content:
+                text_content = "[无法提取文章内容]"
+                logger.error("无法提取文章内容")
             
             detail = {
                 'url': article_url,
                 'content': text_content,
-                'content_images': content_images
+                'content_images': content_images,
+                'content_length': len(text_content),
+                'image_count': len(content_images),
+                'extraction_method': extraction_method
             }
             
-            logger.info(f"获取文章详情成功: 文字长度 {len(text_content)}, 图片数量 {len(content_images)}")
+            logger.info(f"获取文章详情成功: 文字长度 {len(text_content)}, 图片数量 {len(content_images)}, 提取方法: {extraction_method}")
             return detail
             
         except requests.exceptions.Timeout:
@@ -224,6 +351,77 @@ class WeChatAPICrawler:
             return None
         except Exception as e:
             logger.error(f"获取文章详情失败: {e}")
+            # 回退到正则表达式方法
+            return self._get_article_detail_fallback(article_url)
+    
+    def _get_article_detail_fallback(self, article_url: str) -> Optional[Dict]:
+        """
+        回退方法：使用正则表达式获取文章详情
+        """
+        try:
+            logger.info(f"使用回退方法获取文章详情: {article_url}")
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Cookie": self.cookie,
+                "Referer": "https://mp.weixin.qq.com/"
+            }
+            
+            response = requests.get(article_url, headers=headers, timeout=15)
+            
+            if response.status_code != 200:
+                logger.error(f"回退方法获取失败: {response.status_code}")
+                return None
+            
+            html_content = response.text
+            import re
+            
+            text_content = ""
+            content_images = []
+            
+            # 尝试多种提取方法
+            extraction_methods = [
+                r'<div[^>]*id=["\']js_content["\'][^>]*>(.*?)</div>',
+                r'<div[^>]*class=["\']rich_media_content[^"\']*["\'][^>]*>(.*?)</div>',
+                r'<article[^>]*>(.*?)</article>',
+                r'<main[^>]*>(.*?)</main>'
+            ]
+            
+            for pattern in extraction_methods:
+                content_match = re.search(pattern, html_content, re.DOTALL | re.IGNORECASE)
+                if content_match:
+                    content_html = content_match.group(1)
+                    
+                    # 提取图片
+                    img_tags = re.findall(r'<img[^>]+(?:data-src|src)=["\']([^"\']+)["\']', content_html, re.IGNORECASE)
+                    for img_url in img_tags:
+                        if img_url.startswith(('http://', 'https://')):
+                            content_images.append(img_url)
+                        elif img_url.startswith('//'):
+                            content_images.append('https:' + img_url)
+                    
+                    # 提取文本
+                    text_content = re.sub(r'<[^>]+>', '', content_html)
+                    text_content = re.sub(r'\s+', ' ', text_content).strip()
+                    text_content = text_content[:10000]
+                    
+                    if text_content and len(text_content) > 100:
+                        break
+            
+            detail = {
+                'url': article_url,
+                'content': text_content,
+                'content_images': content_images,
+                'content_length': len(text_content),
+                'image_count': len(content_images),
+                'method': 'regex_fallback'
+            }
+            
+            logger.info(f"回退方法获取成功: 文字长度 {len(text_content)}, 图片数量 {len(content_images)}")
+            return detail
+            
+        except Exception as e:
+            logger.error(f"回退方法也失败: {e}")
             return None
 
 

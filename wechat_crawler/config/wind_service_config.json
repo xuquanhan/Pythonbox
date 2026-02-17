@@ -1,0 +1,9 @@
+{
+  "wind_service_name": "Wind金融终端",
+  "wind_fakeid": "Mzk2NDMwOTA5NQ==",
+  "output_format": "json",
+  "output_dir": "data/wind",
+  "max_articles": 5,
+  "auto_run": true,
+  "run_interval": 10
+}

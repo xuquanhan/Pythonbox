@@ -201,36 +201,58 @@ def crawl_accounts(api_crawler: WeChatAPICrawler, accounts: List[Dict], storage:
                 updated_articles = []
                 
                 for i, article in enumerate(articles):
+                    url = article.get('url', '')
                     article['account_name'] = name
                     article['crawl_time'] = datetime.now().isoformat()
                     
-                    # 确保summary字段存在（从文章列表API获取的digest字段）
-                    if 'summary' not in article or not article['summary']:
-                        article['summary'] = article.get('digest', '')
-                    
-                    # 获取文章详情（完整内容）- 只对新文章或没有content的文章获取详情
-                    url = article.get('url', '')
+                    # 检查是否已存在
                     existing_article = storage.get_article_by_url(url)
                     
-                    # 如果是新文章，或者已有文章没有content，才获取详情
-                    should_fetch_detail = not existing_article or not existing_article.get('content')
+                    # 总是获取文章详情，确保能更新图片信息
+                    # 即使文章已有内容，也要重新获取以确保图片信息完整
+                    should_fetch_detail = True
                     
                     if should_fetch_detail:
-                        try:
-                            print(f"  正在获取第 {i+1}/{len(articles)} 篇文章详情...", end=' ')
-                            detail = api_crawler.get_article_detail(url)
-                            if detail and detail.get('content'):
-                                # 使用API返回的content字段
-                                article['content'] = detail['content']
-                                # 保存正文中的图片列表
-                                if detail.get('content_images'):
-                                    article['content_images'] = detail['content_images']
-                                print(f"✓ (内容长度: {len(detail['content'])})")
-                            else:
-                                print("✗ (未能获取内容)")
-                        except Exception as e:
-                            print(f"✗ ({str(e)[:50]})")
-                            logging.warning(f"获取文章详情失败: {e}")
+                        max_retries = 3
+                        retry_count = 0
+                        detail = None
+                        
+                        while retry_count < max_retries:
+                            try:
+                                if retry_count == 0:
+                                    print(f"  正在获取第 {i+1}/{len(articles)} 篇文章详情...", end=' ')
+                                else:
+                                    print(f"  重试 ({retry_count+1}/{max_retries})...", end=' ')
+                                    
+                                detail = api_crawler.get_article_detail(url)
+                                if detail:
+                                    # 即使内容很短也保存，确保完整性
+                                    if detail.get('content'):
+                                        article['content'] = detail['content']
+                                        # 保存正文中的图片列表
+                                        if detail.get('content_images'):
+                                            article['content_images'] = detail['content_images']
+                                        print(f"✓ (内容长度: {len(detail['content'])})" )
+                                        break
+                                    else:
+                                        retry_count += 1
+                                        if retry_count >= max_retries:
+                                            print("✗ (未能获取内容)")
+                                        else:
+                                            time.sleep(2)  # 等待2秒后重试
+                                else:
+                                    retry_count += 1
+                                    if retry_count >= max_retries:
+                                        print("✗ (未能获取详情)")
+                                    else:
+                                        time.sleep(2)  # 等待2秒后重试
+                            except Exception as e:
+                                retry_count += 1
+                                if retry_count >= max_retries:
+                                    print(f"✗ ({str(e)[:50]})")
+                                    logging.warning(f"获取文章详情失败: {e}")
+                                else:
+                                    time.sleep(2)  # 等待2秒后重试
                     else:
                         # 使用数据库中已有的content
                         article['content'] = existing_article.get('content', '')

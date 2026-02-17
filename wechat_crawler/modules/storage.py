@@ -45,6 +45,7 @@ class DataStorage:
                     url TEXT UNIQUE,
                     publish_time TEXT,
                     cover_image TEXT,
+                    content_images TEXT,  -- 存储正文中的图片URL，JSON格式
                     reading_count INTEGER DEFAULT 0,
                     like_count INTEGER DEFAULT 0,
                     crawl_time TEXT,
@@ -60,6 +61,15 @@ class DataStorage:
                 # summary字段不存在，添加它
                 self.logger.info("正在升级数据库，添加summary字段...")
                 cursor.execute('ALTER TABLE articles ADD COLUMN summary TEXT')
+                self.logger.info("数据库升级完成")
+            
+            # 检查是否需要添加content_images字段（兼容旧数据库）
+            try:
+                cursor.execute('SELECT content_images FROM articles LIMIT 1')
+            except sqlite3.OperationalError:
+                # content_images字段不存在，添加它
+                self.logger.info("正在升级数据库，添加content_images字段...")
+                cursor.execute('ALTER TABLE articles ADD COLUMN content_images TEXT')
                 self.logger.info("数据库升级完成")
             
             conn.commit()
@@ -125,11 +135,15 @@ class DataStorage:
                         existing = cursor.fetchone()
                         
                         if not existing:
+                            # 处理content_images字段
+                            content_images = article.get('content_images', [])
+                            content_images_json = json.dumps(content_images, ensure_ascii=False) if content_images else ''
+                            
                             cursor.execute('''
                                 INSERT INTO articles (
                                     account_id, account_name, title, summary, content, url, 
-                                    publish_time, cover_image, reading_count, like_count, crawl_time
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    publish_time, cover_image, content_images, reading_count, like_count, crawl_time
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ''', (
                                 article.get('account_id', ''),
                                 article.get('account_name', ''),
@@ -139,6 +153,7 @@ class DataStorage:
                                 article.get('url', ''),
                                 article.get('publish_time', ''),
                                 article.get('cover_image', ''),
+                                content_images_json,
                                 article.get('reading_count', 0),
                                 article.get('like_count', 0),
                                 article.get('crawl_time', datetime.now().isoformat())
@@ -235,7 +250,19 @@ class DataStorage:
                     ORDER BY publish_time DESC LIMIT ?
                 ''', (limit,))
             
-            articles = [dict(row) for row in cursor.fetchall()]
+            articles = []
+            for row in cursor.fetchall():
+                article_dict = dict(row)
+                # 处理content_images字段，将JSON字符串转换回列表
+                content_images_json = article_dict.get('content_images', '')
+                if content_images_json:
+                    try:
+                        article_dict['content_images'] = json.loads(content_images_json)
+                    except json.JSONDecodeError:
+                        article_dict['content_images'] = []
+                else:
+                    article_dict['content_images'] = []
+                articles.append(article_dict)
             conn.close()
             return articles
         except Exception as e:
@@ -253,7 +280,20 @@ class DataStorage:
             row = cursor.fetchone()
             
             conn.close()
-            return dict(row) if row else None
+            
+            if row:
+                article_dict = dict(row)
+                # 处理content_images字段，将JSON字符串转换回列表
+                content_images_json = article_dict.get('content_images', '')
+                if content_images_json:
+                    try:
+                        article_dict['content_images'] = json.loads(content_images_json)
+                    except json.JSONDecodeError:
+                        article_dict['content_images'] = []
+                else:
+                    article_dict['content_images'] = []
+                return article_dict
+            return None
         except Exception as e:
             self.logger.error(f"获取文章失败: {str(e)}")
             return None
@@ -279,6 +319,9 @@ class DataStorage:
             url = str(article.get('url', ''))
             publish_time = str(article.get('publish_time', ''))
             cover_image = str(article.get('cover_image', ''))
+            # 处理content_images字段，使用JSON格式存储
+            content_images = article.get('content_images', [])
+            content_images_json = json.dumps(content_images, ensure_ascii=False) if content_images else ''
             reading_count = int(article.get('reading_count', 0))
             like_count = int(article.get('like_count', 0))
             crawl_time = str(article.get('crawl_time', datetime.now().isoformat()))
@@ -288,11 +331,11 @@ class DataStorage:
                 cursor.execute('''
                     INSERT INTO articles (
                         account_id, account_name, title, summary, content, url, 
-                        publish_time, cover_image, reading_count, like_count, crawl_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        publish_time, cover_image, content_images, reading_count, like_count, crawl_time
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     account_id, account_name, title, summary, content, url, 
-                    publish_time, cover_image, reading_count, like_count, crawl_time
+                    publish_time, cover_image, content_images_json, reading_count, like_count, crawl_time
                 ))
                 conn.commit()
                 self.logger.info(f"保存文章成功: {title[:30]}...")
@@ -303,17 +346,17 @@ class DataStorage:
                 ''', (url,))
                 existing_content = cursor.fetchone()
                 
-                if existing_content and not existing_content[0] and content:
-                    # 如果现有content为空，且新content不为空，则更新
+                # 总是更新内容，确保获取到最新最完整的内容
+                if content:
                     cursor.execute('''
                         UPDATE articles 
-                        SET content = ?, crawl_time = ? 
+                        SET content = ?, summary = ?, content_images = ?, crawl_time = ? 
                         WHERE url = ?
-                    ''', (content, crawl_time, url))
+                    ''', (content, summary, content_images_json, crawl_time, url))
                     conn.commit()
                     self.logger.info(f"更新文章内容: {title[:30]}...")
                 else:
-                    self.logger.info(f"文章已存在，跳过: {article.get('title', '')[:30]}...")
+                    self.logger.info(f"文章已存在，但无新内容: {article.get('title', '')[:30]}...")
             
             conn.close()
         except Exception as e:
@@ -331,7 +374,19 @@ class DataStorage:
                 ORDER BY publish_time DESC
             ''')
             
-            articles = [dict(row) for row in cursor.fetchall()]
+            articles = []
+            for row in cursor.fetchall():
+                article_dict = dict(row)
+                # 处理content_images字段，将JSON字符串转换回列表
+                content_images_json = article_dict.get('content_images', '')
+                if content_images_json:
+                    try:
+                        article_dict['content_images'] = json.loads(content_images_json)
+                    except json.JSONDecodeError:
+                        article_dict['content_images'] = []
+                else:
+                    article_dict['content_images'] = []
+                articles.append(article_dict)
             conn.close()
             return articles
         except Exception as e:
@@ -354,7 +409,20 @@ class DataStorage:
             
             row = cursor.fetchone()
             conn.close()
-            return dict(row) if row else None
+            
+            if row:
+                article_dict = dict(row)
+                # 处理content_images字段，将JSON字符串转换回列表
+                content_images_json = article_dict.get('content_images', '')
+                if content_images_json:
+                    try:
+                        article_dict['content_images'] = json.loads(content_images_json)
+                    except json.JSONDecodeError:
+                        article_dict['content_images'] = []
+                else:
+                    article_dict['content_images'] = []
+                return article_dict
+            return None
         except Exception as e:
             self.logger.error(f"获取最新文章失败: {str(e)}")
             return None
