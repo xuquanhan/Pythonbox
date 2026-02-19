@@ -1,0 +1,9 @@
+{
+  "service_name": "Wind金融终端",
+  "output_format": "json",
+  "output_dir": "data/wind_messages",
+  "max_messages": 50,
+  "auto_run": false,
+  "run_interval": 300,
+  "last_message_id": ""
+}
