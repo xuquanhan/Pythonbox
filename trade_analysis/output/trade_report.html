@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交易分析报告</title>
+    <style>
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 2px solid #4472C4; padding-bottom: 10px; }
+        h2 { color: #4472C4; margin-top: 30px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .summary-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #4472C4; }
+        .summary-card h3 { margin: 0 0 10px 0; color: #666; font-size: 14px; }
+        .summary-card .value { font-size: 24px; font-weight: bold; color: #333; }
+        .profit { color: #28a745; }
+        .loss { color: #dc3545; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #4472C4; color: white; }
+        tr:hover { background-color: #f5f5f5; }
+        .positive { color: #28a745; }
+        .negative { color: #dc3545; }
+        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 交易分析报告</h1>
+
+        <h2>📋 分析配置</h2>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <h3>分析模式</h3>
+                <div class="value">full</div>
+            </div>
+            <div class="summary-card">
+                <h3>总记录数</h3>
+                <div class="value">2655</div>
+            </div>
+            <div class="summary-card">
+                <h3>买入次数</h3>
+                <div class="value">975</div>
+            </div>
+            <div class="summary-card">
+                <h3>卖出次数</h3>
+                <div class="value">751</div>
+            </div>
+        </div>
+
+        <h2>💰 账户概况</h2>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <h3>账户净转入</h3>
+                <div class="value">590,000.00</div>
+            </div>
+            <div class="summary-card">
+                <h3>现金余额</h3>
+                <div class="value">453.32</div>
+            </div>
+            <div class="summary-card">
+                <h3>逆回购出借</h3>
+                <div class="value">278,000.00</div>
+            </div>
+            <div class="summary-card">
+                <h3>持仓市值</h3>
+                <div class="value">335,846.00</div>
+            </div>
+            <div class="summary-card">
+                <h3>账户总资产</h3>
+                <div class="value">614,299.32</div>
+            </div>
+            <div class="summary-card">
+                <h3>账户总盈亏</h3>
+                <div class="value profit">24,299.32</div>
+            </div>
+            <div class="summary-card">
+                <h3>收益率</h3>
+                <div class="value profit">4.12%</div>
+            </div>
+        </div>
+
+        <h2>� 绩效指标</h2>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <h3>总交易次数</h3>
+                <div class="value">1045</div>
+            </div>
+            <div class="summary-card">
+                <h3>盈利次数</h3>
+                <div class="value profit">580</div>
+            </div>
+            <div class="summary-card">
+                <h3>亏损次数</h3>
+                <div class="value loss">465</div>
+            </div>
+            <div class="summary-card">
+                <h3>胜率</h3>
+                <div class="value">55.50%</div>
+            </div>
+            <div class="summary-card">
+                <h3>盈亏比</h3>
+                <div class="value">0.85</div>
+            </div>
+            <div class="summary-card">
+                <h3>夏普比率</h3>
+                <div class="value">2.54</div>
+            </div>
+            <div class="summary-card">
+                <h3>最大回撤</h3>
+                <div class="value loss">92.96%</div>
+            </div>
+        </div>
+
+        <h2>� 期末持仓</h2>
+        <table>
+            <tr>
+                <th>证券代码</th>
+                <th>证券名称</th>
+                <th>持仓数量</th>
+                <th>成本价</th>
+                <th>收盘价</th>
+                <th>市值</th>
+            </tr>
+
+            <tr>
+                <td>159937</td>
+                <td>黄金9999</td>
+                <td>4000</td>
+                <td>7.1630</td>
+                <td>10.5190</td>
+                <td>42,076.00</td>
+            </tr>
+
+            <tr>
+                <td>600089</td>
+                <td>特变电工</td>
+                <td>3000</td>
+                <td>0.7076</td>
+                <td>28.7500</td>
+                <td>86,250.00</td>
+            </tr>
+
+            <tr>
+                <td>603893</td>
+                <td>XD瑞芯微</td>
+                <td>300</td>
+                <td>163.7002</td>
+                <td>184.3500</td>
+                <td>55,305.00</td>
+            </tr>
+
+            <tr>
+                <td>688063</td>
+                <td>派能科技</td>
+                <td>2000</td>
+                <td>68.5410</td>
+                <td>61.0100</td>
+                <td>122,020.00</td>
+            </tr>
+
+            <tr>
+                <td>300418</td>
+                <td>昆仑万维</td>
+                <td>500</td>
+                <td>62.9100</td>
+                <td>60.3900</td>
+                <td>30,195.00</td>
+            </tr>
+        </table>
+
+        <div class="footer">
+            <p>报告生成时间: 2026-02-22 22:49:18</p>
+        </div>
+    </div>
+</body>
+</html>
