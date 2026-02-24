@@ -229,18 +229,18 @@ def get_available_filename(base_path):
 
 
 def perform_country_analysis(joined_contents, doc):
-    """使用 Qwen API 进行国别分析"""
+    """使用 Qwen API 进行中美欧三地经济分析"""
     if not dashscope_available:
-        print("由于dashscope库未安装，跳过国别分析功能")
-        doc.add_paragraph("\n\n国别经济数据分析总结:")
-        doc.add_paragraph("由于dashscope库未安装，跳过国别分析功能")
+        print("由于dashscope库未安装，跳过中美欧三地经济分析功能")
+        doc.add_paragraph("\n\n中美欧三地经济数据分析:")
+        doc.add_paragraph("由于dashscope库未安装，跳过中美欧三地经济分析功能")
         return
 
     api_key = os.environ.get('DASHSCOPE_API_KEY_Qwen')
     if not api_key:
-        print("未找到环境变量 DASHSCOPE_API_KEY_Qwen，跳过国别分析功能")
-        doc.add_paragraph("\n\n国别经济数据分析总结:")
-        doc.add_paragraph("未找到API密钥，跳过国别分析功能")
+        print("未找到环境变量 DASHSCOPE_API_KEY_Qwen，跳过中美欧三地经济分析功能")
+        doc.add_paragraph("\n\n中美欧三地经济数据分析:")
+        doc.add_paragraph("未找到API密钥，跳过中美欧三地经济分析功能")
         return
 
     dashscope.api_key = api_key
@@ -272,18 +272,18 @@ def perform_country_analysis(joined_contents, doc):
                 analysis_content = "国别分析总结未能生成"
                 print(f"DEBUG: No content found in analysis response: {analysis_response}")
 
-            doc.add_paragraph("\n\n国别经济数据分析总结:")
+            doc.add_paragraph("\n\n中美欧三地经济数据分析:")
             doc.add_paragraph(analysis_content)
-            print("\n\n国别经济数据分析总结:\n" + analysis_content)
-            print("国别分析总结完成")
+            print("\n\n中美欧三地经济数据分析:\n" + analysis_content)
+            print("中美欧三地经济分析完成")
         else:
-            print(f"国别分析失败: {analysis_response.code}, {analysis_response.message}")
-            doc.add_paragraph("\n\n国别经济数据分析总结:")
-            doc.add_paragraph(f"国别分析失败: {analysis_response.code}, {analysis_response.message}")
+            print(f"中美欧三地经济分析失败: {analysis_response.code}, {analysis_response.message}")
+            doc.add_paragraph("\n\n中美欧三地经济数据分析:")
+            doc.add_paragraph(f"中美欧三地经济分析失败: {analysis_response.code}, {analysis_response.message}")
     except Exception as e:
-        print(f"国别分析过程中出现错误: {e}")
-        doc.add_paragraph("\n\n国别经济数据分析总结:")
-        doc.add_paragraph(f"国别分析过程中出现错误: {e}")
+        print(f"中美欧三地经济分析过程中出现错误: {e}")
+        doc.add_paragraph("\n\n中美欧三地经济数据分析:")
+        doc.add_paragraph(f"中美欧三地经济分析过程中出现错误: {e}")
 
 
 def perform_translation(joined_contents, doc):

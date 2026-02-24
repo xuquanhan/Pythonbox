@@ -1,6 +1,6 @@
 ---
-name: "bloomberg-api-helper"
-description: "Provides help documentation for Bloomberg BLPAPI Python. Invoke when user encounters issues with Bloomberg API, needs to troubleshoot blpapi errors, or asks for Bloomberg API usage examples."
+name: bloomberg-api-helper
+description: Provides help documentation for Bloomberg BLPAPI Python. Invoke when user encounters issues with Bloomberg API, needs to troubleshoot blpapi errors, or asks for Bloomberg API usage examples.
 ---
 
 # Bloomberg BLPAPI Python Helper
