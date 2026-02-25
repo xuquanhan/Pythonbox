@@ -1,0 +1,10 @@
+[server]
+port = 8502
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+magicEnabled = true
+fastReruns = false
