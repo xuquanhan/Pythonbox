@@ -61,25 +61,45 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.header("1. 上传文件")
     uploaded_file = st.file_uploader(
-        "选择EPUB文件", 
-        type=['epub'],
-        help="支持上传EPUB格式的电子书"
+        "选择文件", 
+        type=['epub', 'txt'],
+        help="支持上传EPUB或TXT格式的文件"
     )
     
     if uploaded_file:
         st.success(f"已选择: {uploaded_file.name}")
         file_path = save_uploaded_file(uploaded_file)
+        file_type = Path(uploaded_file.name).suffix.lower()
         
         st.header("2. 选择操作")
-        operation = st.radio(
-            "操作类型",
-            ["仅转换格式", "仅翻译", "翻译后转换"],
-            help="选择需要执行的操作"
-        )
+        
+        if file_type == '.txt':
+            operation = st.radio(
+                "操作类型",
+                ["仅翻译"],
+                help="TXT文件仅支持翻译"
+            )
+        else:
+            operation = st.radio(
+                "操作类型",
+                ["仅转换格式", "仅翻译", "翻译后转换"],
+                help="选择需要执行的操作"
+            )
         
         st.header("3. 配置")
         
         if operation != "仅转换格式":
+            provider = st.selectbox(
+                "翻译服务",
+                ["ollama", "dashscope"],
+                index=0,
+                format_func=lambda x: {
+                    "ollama": "Ollama (本地模型，推荐)",
+                    "dashscope": "阿里DashScope (云端API)"
+                }[x],
+                help="Ollama使用本地部署的模型，DashScope调用云端API"
+            )
+            
             source_lang = st.selectbox(
                 "源语言",
                 ["auto", "en", "ja", "ko", "fr", "de", "es"],
@@ -105,10 +125,20 @@ with col1:
                 }[x]
             )
         else:
+            provider = None
             source_lang = None
             target_lang = None
         
-        convert_to_mobi = st.checkbox("转换为Mobi格式", value=True, help="转换为Kindle兼容的Mobi格式")
+        output_format = st.radio(
+            "输出格式",
+            ["epub", "txt"],
+            format_func=lambda x: {
+                "epub": "EPUB格式 (推荐)",
+                "txt": "纯文本TXT"
+            }[x],
+            horizontal=True,
+            help="选择输出文件格式"
+        )
         
         st.header("4. 开始处理")
         process_btn = st.button("🚀 开始处理", type="primary", use_container_width=True)
@@ -120,21 +150,28 @@ with col2:
         with st.spinner("处理中..."):
             progress_bar = st.progress(0)
             status_text = st.empty()
+            translate_preview = st.empty()
             
             try:
                 status_text.text("正在解析文件...")
                 progress_bar.progress(5)
                 
-                parser = EpubParser(file_path)
-                result = parser.parse()
-                
-                st.info(f"**书名**: {result['metadata'].get('title', 'Unknown')}")
-                st.info(f"**作者**: {result['metadata'].get('author', 'Unknown')}")
-                st.info(f"**语言**: {result['metadata'].get('language', 'Unknown')}")
-                st.info(f"**章节数**: {len(result['chapters'])}")
-                
-                total_chars = sum(len(ch['content']) for ch in result['chapters'])
-                st.info(f"**总字符数**: {total_chars:,}")
+                if file_type == '.epub':
+                    parser = EpubParser(file_path)
+                    result = parser.parse()
+                    
+                    st.info(f"**书名**: {result['metadata'].get('title', 'Unknown')}")
+                    st.info(f"**作者**: {result['metadata'].get('author', 'Unknown')}")
+                    st.info(f"**语言**: {result['metadata'].get('language', 'Unknown')}")
+                    st.info(f"**章节数**: {len(result['chapters'])}")
+                    
+                    total_chars = sum(len(ch['content']) for ch in result['chapters'])
+                    st.info(f"**总字符数**: {total_chars:,}")
+                else:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    st.info(f"**文件名**: {uploaded_file.name}")
+                    st.info(f"**字符数**: {len(content):,}")
                 
                 output_file = None
                 
@@ -143,11 +180,15 @@ with col2:
                     status_text.text("正在转换格式...")
                     
                     converter = MobiConverter()
-                    if convert_to_mobi:
-                        output_file = converter.convert_to_mobi(
-                            file_path, 
-                            str(CONVERTED_DIR / f"{Path(uploaded_file.name).stem}.mobi")
-                        )
+                    if output_format == "txt":
+                        parser = EpubParser(file_path)
+                        parser.parse()
+                        txt_path = str(CONVERTED_DIR / f"{Path(uploaded_file.name).stem}.txt")
+                        with open(txt_path, 'w', encoding='utf-8') as f:
+                            for ch in parser.chapters:
+                                f.write(f"\n=== {ch['title']} ===\n\n")
+                                f.write(ch['content'])
+                        output_file = txt_path
                     else:
                         output_file = converter.convert(
                             file_path,
@@ -156,6 +197,58 @@ with col2:
                     
                     progress_bar.progress(100)
                     status_text.text("转换完成!")
+                
+                elif file_type == '.txt' and operation == "仅翻译":
+                    def update_progress(pct, msg):
+                        progress_bar.progress(pct)
+                        status_text.text(msg)
+                    
+                    progress_bar.progress(10)
+                    status_text.text("正在读取TXT文件...")
+                    
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    translator = Translator(provider if provider else 'ollama')
+                    translator.warm_up()
+                    
+                    progress_bar.progress(20)
+                    status_text.text(f"检测到语言: {source_lang}, 开始翻译...")
+                    
+                    if source_lang == 'auto':
+                        detected_lang = translator.detect_language(content)
+                        source_lang = detected_lang
+                        status_text.text(f"自动检测为{source_lang}, 开始翻译...")
+                    
+                    chunks = translator._split_text(content, max_length=1500)
+                    translated_parts = []
+                    total_chunks = len(chunks)
+                    
+                    def stream_callback(text):
+                        preview_text = '\n\n'.join(translated_parts) + '\n\n' + text
+                        translate_preview.text_area("翻译预览", preview_text, height=300)
+                    
+                    for i, chunk in enumerate(chunks):
+                        progress = 20 + int((i + 1) / total_chunks * 60)
+                        status_text.text(f"翻译中... ({i+1}/{total_chunks})")
+                        translated = translator.translate_text(chunk, source_lang, target_lang, stream_callback=stream_callback if i == 0 else None)
+                        translated_parts.append(translated)
+                        progress_bar.progress(progress)
+                        
+                        preview_text = '\n\n'.join(translated_parts)
+                        translate_preview.text_area("翻译预览", preview_text, height=300)
+                    
+                    progress_bar.progress(85)
+                    status_text.text("正在保存...")
+                    
+                    txt_output_path = str(TRANSLATED_DIR / f"[译]{uploaded_file.name}")
+                    with open(txt_output_path, 'w', encoding='utf-8') as f:
+                        f.write('\n\n'.join(translated_parts))
+                    
+                    output_file = txt_output_path
+                    
+                    progress_bar.progress(100)
+                    status_text.text("翻译完成!")
                     
                 elif operation == "仅翻译":
                     def update_progress(pct, msg):
@@ -167,6 +260,8 @@ with col2:
                         str(TRANSLATED_DIR / f"[译]{uploaded_file.name}"),
                         source_lang=source_lang,
                         target_lang=target_lang,
+                        provider=provider,
+                        output_format=output_format,
                         progress_callback=update_progress
                     )
                     
@@ -180,19 +275,12 @@ with col2:
                         str(TRANSLATED_DIR / f"[译]{uploaded_file.name}"),
                         source_lang=source_lang,
                         target_lang=target_lang,
+                        provider=provider,
+                        output_format=output_format,
                         progress_callback=update_progress
                     )
                     
-                    if convert_to_mobi:
-                        progress_bar.progress(90)
-                        status_text.text("正在转换为Mobi...")
-                        converter = MobiConverter()
-                        output_file = converter.convert_to_mobi(
-                            temp_epub,
-                            str(CONVERTED_DIR / f"[译]{Path(uploaded_file.name).stem}.mobi")
-                        )
-                    else:
-                        output_file = temp_epub
+                    output_file = temp_epub
                     
                     progress_bar.progress(100)
                     status_text.text("处理完成!")
@@ -216,7 +304,7 @@ with col2:
                     st.code(traceback.format_exc())
     
     else:
-        st.info("👈 请先上传EPUB文件并选择操作")
+        st.info("👈 请先上传文件并选择操作")
         st.markdown("""
         ### 使用说明
         1. **上传EPUB文件** - 选择要处理的电子书
