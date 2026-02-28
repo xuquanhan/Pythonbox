@@ -18,6 +18,32 @@ $pushFailed = $false
 $pushErrorMessage = ""
 $clashPath = "C:\Users\xuqua\AppData\Local\Programs\Clash for Windows\Clash for Windows.exe"
 
+# Function to retry sync operation
+function Retry-SyncOperation {
+    param(
+        [string]$OperationName,
+        [scriptblock]$Operation
+    )
+    
+    while ($true) {
+        $result = & $Operation
+        $exitCode = $LASTEXITCODE
+        
+        if ($exitCode -eq 0) {
+            return @{ Success = $true; Output = $result }
+        }
+        
+        Write-Host "[WARNING] $OperationName failed!" -ForegroundColor Yellow
+        
+        $retry = Read-Host "Sync failed. Do you want to try again? (Y/N)"
+        if ($retry -ne "Y" -and $retry -ne "y") {
+            return @{ Success = $false; Output = $result }
+        }
+        
+        Write-Host "[INFO] Retrying $OperationName..." -ForegroundColor Cyan
+    }
+}
+
 # Check Git
 if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
     Write-Host "[ERROR] Git is not installed or not in PATH!" -ForegroundColor Red
@@ -73,16 +99,57 @@ function Open-Clash {
 Write-Host "1. Analyzing Git status..." -ForegroundColor Yellow
 Write-Host ""
 
-try {
-    # Fetch remote info first (without merging)
-    $fetchOutput = git fetch origin main 2>&1
-    $fetchExitCode = $LASTEXITCODE
-    
-    if ($fetchExitCode -ne 0) {
-        Write-Host "[WARNING] Failed to fetch from remote. Network issue?" -ForegroundColor Yellow
-        Open-Clash
+$fetchSuccess = $false
+
+while (-not $fetchSuccess) {
+    try {
+        # Fetch remote info first (without merging)
+        $fetchOutput = git fetch origin main 2>&1
+        $fetchExitCode = $LASTEXITCODE
+        
+        if ($fetchExitCode -ne 0) {
+            Write-Host "[WARNING] Failed to fetch from remote. Network issue?" -ForegroundColor Yellow
+            
+            while ($true) {
+                $choice = Read-Host "Fetch failed. (Y) Try again, (C) Open Clash, (N) Exit"
+                if ($choice -eq "Y" -or $choice -eq "y") {
+                    Write-Host "[INFO] Retrying fetch..." -ForegroundColor Cyan
+                    break
+                } elseif ($choice -eq "C" -or $choice -eq "c") {
+                    Open-Clash
+                    Write-Host "[INFO] Retrying fetch..." -ForegroundColor Cyan
+                    break
+                } elseif ($choice -eq "N" -or $choice -eq "n") {
+                    Write-Host "[INFO] Exiting..." -ForegroundColor Gray
+                    exit 0
+                }
+            }
+            continue
+        }
+        
+        $fetchSuccess = $true
+    } catch {
+        Write-Host "[WARNING] Exception during fetch: $($_.Exception.Message)" -ForegroundColor Yellow
+        
+        while ($true) {
+            $choice = Read-Host "Fetch failed. (Y) Try again, (C) Open Clash, (N) Exit"
+            if ($choice -eq "Y" -or $choice -eq "y") {
+                Write-Host "[INFO] Retrying fetch..." -ForegroundColor Cyan
+                break
+            } elseif ($choice -eq "C" -or $choice -eq "c") {
+                Open-Clash
+                Write-Host "[INFO] Retrying fetch..." -ForegroundColor Cyan
+                break
+            } elseif ($choice -eq "N" -or $choice -eq "n") {
+                Write-Host "[INFO] Exiting..." -ForegroundColor Gray
+                exit 0
+            }
+        }
+        continue
     }
-    
+}
+
+try {
     # Check if local is ahead of remote
     $aheadOutput = git log origin/main..HEAD --oneline 2>$null
     $aheadCount = ($aheadOutput | Measure-Object -Line).Lines
@@ -195,33 +262,73 @@ if ($action -eq "pull" -or $action -eq "both") {
     Write-Host "4. Pulling remote changes..." -ForegroundColor Yellow
     Write-Host ""
     
-    $oldErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
+    $pullSuccess = $false
     
-    try {
-        $pullOutput = git pull origin main 2>&1
-        $pullExitCode = $LASTEXITCODE
+    while (-not $pullSuccess) {
+        $oldErrorAction = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         
-        if ($pullOutput) {
-            Write-Host $pullOutput
+        try {
+            $pullOutput = git pull origin main 2>&1
+            $pullExitCode = $LASTEXITCODE
+            
+            if ($pullOutput) {
+                Write-Host $pullOutput
+            }
+            
+            if ($pullExitCode -ne 0) {
+                Write-Host "[WARNING] Pull operation failed!" -ForegroundColor Yellow
+                
+                while ($true) {
+                    $choice = Read-Host "Pull failed. (Y) Try again, (C) Open Clash, (N) Exit"
+                    if ($choice -eq "Y" -or $choice -eq "y") {
+                        Write-Host "[INFO] Retrying pull..." -ForegroundColor Cyan
+                        break
+                    } elseif ($choice -eq "C" -or $choice -eq "c") {
+                        Open-Clash
+                        Write-Host "[INFO] Retrying pull..." -ForegroundColor Cyan
+                        break
+                    } elseif ($choice -eq "N" -or $choice -eq "n") {
+                        $pullSuccess = $true
+                        $ErrorActionPreference = $oldErrorAction
+                        break
+                    }
+                }
+                if ($pullSuccess) { break }
+                continue
+            } elseif ($pullOutput -match "CONFLICT") {
+                Write-Host "[ERROR] Conflicts detected! Please resolve manually." -ForegroundColor Red
+                exit 1
+            } elseif ($pullOutput -match "Already up to date") {
+                Write-Host "[OK] Repository is already up to date!" -ForegroundColor Green
+                $pullSuccess = $true
+            } else {
+                Write-Host "[OK] Successfully pulled changes!" -ForegroundColor Green
+                $pullSuccess = $true
+            }
+        } catch {
+            Write-Host "[WARNING] Exception during pull: $($_.Exception.Message)" -ForegroundColor Yellow
+            
+            while ($true) {
+                $choice = Read-Host "Pull failed. (Y) Try again, (C) Open Clash, (N) Exit"
+                if ($choice -eq "Y" -or $choice -eq "y") {
+                    Write-Host "[INFO] Retrying pull..." -ForegroundColor Cyan
+                    break
+                } elseif ($choice -eq "C" -or $choice -eq "c") {
+                    Open-Clash
+                    Write-Host "[INFO] Retrying pull..." -ForegroundColor Cyan
+                    break
+                } elseif ($choice -eq "N" -or $choice -eq "n") {
+                    $pullSuccess = $true
+                    $ErrorActionPreference = $oldErrorAction
+                    break
+                }
+            }
+            if ($pullSuccess) { break }
+            continue
+        } finally {
+            $ErrorActionPreference = $oldErrorAction
         }
-        
-        if ($pullExitCode -ne 0) {
-            Write-Host "[WARNING] Pull operation failed!" -ForegroundColor Yellow
-            Open-Clash
-        } elseif ($pullOutput -match "CONFLICT") {
-            Write-Host "[ERROR] Conflicts detected! Please resolve manually." -ForegroundColor Red
-            exit 1
-        } elseif ($pullOutput -match "Already up to date") {
-            Write-Host "[OK] Repository is already up to date!" -ForegroundColor Green
-        } else {
-            Write-Host "[OK] Successfully pulled changes!" -ForegroundColor Green
-        }
-    } catch {
-        Write-Host "[WARNING] Exception during pull: $($_.Exception.Message)" -ForegroundColor Yellow
-        Open-Clash
-    } finally {
-        $ErrorActionPreference = $oldErrorAction
     }
 }
 
@@ -230,39 +337,77 @@ if ($action -eq "push" -or $action -eq "both") {
     Write-Host "5. Pushing local changes..." -ForegroundColor Yellow
     Write-Host ""
     
-    try {
-        $pushOutput = git push origin main 2>&1
-        $pushExitCode = $LASTEXITCODE
-        
-        if ($pushOutput) {
-            Write-Host $pushOutput
-        }
-        
-        if ($pushExitCode -eq 0) {
-            if ($pushOutput -match "Everything up-to-date") {
-                Write-Host "[OK] No changes to push." -ForegroundColor Green
-            } else {
-                Write-Host "[OK] Successfully pushed changes!" -ForegroundColor Green
+    $pushSuccess = $false
+    
+    while (-not $pushSuccess) {
+        try {
+            $pushOutput = git push origin main 2>&1
+            $pushExitCode = $LASTEXITCODE
+            
+            if ($pushOutput) {
+                Write-Host $pushOutput
             }
-            $pushFailed = $false
-        } else {
-            if ($pushOutput -match "Everything up-to-date") {
-                Write-Host "[OK] No changes to push." -ForegroundColor Green
+            
+            if ($pushExitCode -eq 0) {
+                if ($pushOutput -match "Everything up-to-date") {
+                    Write-Host "[OK] No changes to push." -ForegroundColor Green
+                } else {
+                    Write-Host "[OK] Successfully pushed changes!" -ForegroundColor Green
+                }
                 $pushFailed = $false
+                $pushSuccess = $true
             } else {
-                Write-Host "[WARNING] Push failed!" -ForegroundColor Yellow
-                Open-Clash
-                Write-Host "[INFO] Changes committed locally but not pushed." -ForegroundColor Gray
-                $pushFailed = $true
-                $pushErrorMessage = $pushOutput
+                if ($pushOutput -match "Everything up-to-date") {
+                    Write-Host "[OK] No changes to push." -ForegroundColor Green
+                    $pushFailed = $false
+                    $pushSuccess = $true
+                } else {
+                    Write-Host "[WARNING] Push failed!" -ForegroundColor Yellow
+                    
+                    while ($true) {
+                        $choice = Read-Host "Push failed. (Y) Try again, (C) Open Clash, (N) Exit"
+                        if ($choice -eq "Y" -or $choice -eq "y") {
+                            Write-Host "[INFO] Retrying push..." -ForegroundColor Cyan
+                            break
+                        } elseif ($choice -eq "C" -or $choice -eq "c") {
+                            Open-Clash
+                            Write-Host "[INFO] Retrying push..." -ForegroundColor Cyan
+                            break
+                        } elseif ($choice -eq "N" -or $choice -eq "n") {
+                            Write-Host "[INFO] Changes committed locally but not pushed." -ForegroundColor Gray
+                            $pushFailed = $true
+                            $pushErrorMessage = $pushOutput
+                            $pushSuccess = $true
+                            break
+                        }
+                    }
+                    if ($pushSuccess) { break }
+                    continue
+                }
             }
+        } catch {
+            Write-Host "[WARNING] Push error: $($_.Exception.Message)" -ForegroundColor Yellow
+            
+            while ($true) {
+                $choice = Read-Host "Push failed. (Y) Try again, (C) Open Clash, (N) Exit"
+                if ($choice -eq "Y" -or $choice -eq "y") {
+                    Write-Host "[INFO] Retrying push..." -ForegroundColor Cyan
+                    break
+                } elseif ($choice -eq "C" -or $choice -eq "c") {
+                    Open-Clash
+                    Write-Host "[INFO] Retrying push..." -ForegroundColor Cyan
+                    break
+                } elseif ($choice -eq "N" -or $choice -eq "n") {
+                    Write-Host "[INFO] Changes committed locally but not pushed." -ForegroundColor Gray
+                    $pushFailed = $true
+                    $pushErrorMessage = $_.Exception.Message
+                    $pushSuccess = $true
+                    break
+                }
+            }
+            if ($pushSuccess) { break }
+            continue
         }
-    } catch {
-        Write-Host "[WARNING] Push error: $($_.Exception.Message)" -ForegroundColor Yellow
-        Open-Clash
-        Write-Host "[INFO] Changes committed locally but not pushed." -ForegroundColor Gray
-        $pushFailed = $true
-        $pushErrorMessage = $_.Exception.Message
     }
 }
 
