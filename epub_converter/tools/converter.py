@@ -244,23 +244,29 @@ class MobiConverter:
         return output_path
     
     def convert_to_mobi(self, epub_path: str, output_path: str = None) -> str:
-        epub_converted = self.convert(epub_path, output_path.replace('.mobi', '.epub') if output_path else None)
+        if output_path is None:
+            output_path = epub_path.replace('.epub', '.mobi')
         
-        mobi_path = epub_converted.replace('.epub', '.mobi')
+        epub_converted = self.convert(epub_path, output_path.replace('.mobi', '.epub'))
         
         try:
-            from mobi import MOBIFile
-            m = MOBIFile(epub_converted)
-            m.convert(mobi_path)
-        except ImportError:
-            try:
-                import subprocess
-                result = subprocess.run(
-                    ['kindlegen', epub_converted, '-o', Path(epub_converted).stem + '.mobi'],
-                    capture_output=True,
-                    text=True
-                )
-            except:
-                pass
-        
-        return mobi_path if Path(mobi_path).exists() else epub_converted
+            import subprocess
+            
+            result = subprocess.run(
+                ['ebook-convert', epub_converted, output_path],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.returncode == 0 and Path(output_path).exists():
+                return output_path
+            elif Path(epub_converted).exists():
+                return epub_converted
+            else:
+                return epub_converted
+        except FileNotFoundError:
+            return epub_converted
+        except Exception as e:
+            print(f"Mobi conversion error: {e}")
+            return epub_converted
