@@ -251,7 +251,7 @@ def perform_country_analysis(joined_contents, doc):
             model="qwen-max",
             messages=[
                 {'role': 'system', 'content': '专业经济分析师。'},
-                {'role': 'user', 'content': f'请基于以下数据，对上周中、美、欧三个国家和地区的经济数据进行深度分析，分析结构应包括：\n1. 关键指标表现：GDP、工业生产、零售销售、就业、通胀等核心数据\n2. 最新数据变化：突出最新公布数据的趋势和变化特点\n3. 趋势走向：分析当前经济运行的主要特征，如内外需表现差异等\n4. 重要观察点：深入分析数据背后的驱动因素和结构性问题\n5. 风险与前瞻：识别潜在风险点并提供前瞻性判断\n\n要求：突出结构性问题、政策影响、风险点和增长前景。每个国家用一段连贯的文字表述，避免简单罗列数据。数据：{joined_contents}'}
+                {'role': 'user', 'content': f'请基于以下数据，对上周中、美、欧三个国家和地区的经济数据进行深度分析。\n\n分析要求：\n1. 输出内容不要使用星号(*)或其他特殊符号作为列表标记\n2. 每个国家用一段连贯的文字表述，避免简单罗列数据\n3. 突出结构性问题、政策影响、风险点和增长前景\n\n分析结构应包括：\n1. 关键指标表现：GDP、工业生产、零售销售、就业、通胀等核心数据\n2. 最新数据变化：突出最新公布数据的趋势和变化特点\n3. 趋势走向：分析当前经济运行的主要特征，如内外需表现差异等\n4. 重要观察点：深入分析数据背后的驱动因素和结构性问题\n5. 风险与前瞻：识别潜在风险点并提供前瞻性判断\n\n数据：{joined_contents}'}
             ]
         )
 
@@ -309,7 +309,7 @@ def perform_translation(joined_contents, doc):
             model="qwen-flash",
             messages=[
                 {'role': 'system', 'content': '你是一个专业的财经翻译专家，擅长将经济数据和分析报告从英文翻译成中文。请保持原文的专业术语准确性、数据精确性，并维持正式的财经报告语体。'},
-                {'role': 'user', 'content': f'请将以下英文经济数据和分析报告翻译成中文，要求：\n1. 保持所有数字、百分比、日期等数据的精确性\n2. 使用标准的财经术语，如GDP、PMI、CPI等保持英文缩写，记得先写中文然后紧跟在括号里的英文缩写\n3. 保持正式的财经报告语体\n4. 注意术语翻译：flash→初值, advance estimate→初步估算, yoy→同比, mom→环比。若原文没有明确环比和同比，再翻译的时候请根据上下文，区分环比和同比\n5. 确保译文逻辑清晰，符合中文表达习惯\n\n经济数据内容：{joined_contents}'}
+                {'role': 'user', 'content': f'请将以下英文经济数据和分析报告翻译成中文。\n\n翻译要求：\n1. 输出内容不要使用星号(*)或其他特殊符号作为列表标记\n2. 保持所有数字、百分比、日期等数据的精确性\n3. 使用标准的财经术语，如GDP、PMI、CPI等保持英文缩写，记得先写中文然后紧跟在括号里的英文缩写\n4. 保持正式的财经报告语体\n5. 注意术语翻译：flash→初值, advance estimate→初步估算, yoy→同比, mom→环比。若原文没有明确环比和同比，再翻译的时候请根据上下文，区分环比和同比\n6. 确保译文逻辑清晰，符合中文表达习惯\n\n经济数据内容：{joined_contents}'}
             ]
         )
 
@@ -371,7 +371,26 @@ def main():
 
     # 使用Service对象初始化Edge Web驱动
     service = Service('C:\\msedgedriver\\msedgedriver.exe')
-    driver = webdriver.Edge(service=service, options=options)
+    try:
+        driver = webdriver.Edge(service=service, options=options)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(keyword in error_msg for keyword in ['session', 'driver', 'version', 'invalid', 'disconnected', 'timeout', 'chromium']):
+            print("\n" + "="*60)
+            print("错误: WebDriver 初始化失败，可能是版本不匹配")
+            print("="*60)
+            print("解决方案:")
+            print("1. 请访问以下网址下载最新版的 Microsoft Edge WebDriver:")
+            print("   https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/")
+            print("2. 下载与您当前 Edge 浏览器版本匹配的 WebDriver")
+            print("3. 解压后将 msedgedriver.exe 替换到: C:\\msedgedriver\\")
+            print("4. 如需查看Edge版本: 打开Edge -> 设置和更多(...) -> 帮助与反馈 -> 关于 Microsoft Edge")
+            print("="*60)
+            print("\n程序即将退出...")
+            time.sleep(5)
+            exit(1)
+        else:
+            raise
 
     # 设置各种超时
     driver.set_page_load_timeout(180)
