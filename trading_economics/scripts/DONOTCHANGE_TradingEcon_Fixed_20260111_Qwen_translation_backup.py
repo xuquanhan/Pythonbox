@@ -23,21 +23,18 @@ import requests
 from urllib.parse import urljoin
 
 # 导入Dashscope相关模块
+dashscope_available = False
+dashscope = None
+Generation = None
+
 try:
     import dashscope
-    print("DEBUG: dashscope successfully imported")
-    from dashscope import Generation  # 只导入Generation，不需要Message
-
+    from dashscope import Generation
     dashscope_available = True
-    print("DEBUG: dashscope library is available")
-except ImportError as e:
-    print(f"DEBUG: ImportError when importing dashscope: {e}")
-    print("警告: dashscope 库未安装，翻译功能将被跳过。如需使用翻译功能，请运行: pip install dashscope")
-    dashscope_available = False
+except ImportError:
+    print("提示: dashscope 库未安装，翻译和国别分析功能将被跳过。如需使用这些功能，请运行: pip install dashscope")
 except Exception as e:
-    print(f"DEBUG: Unexpected error when importing dashscope: {e}")
-    print("警告: dashscope 库出现问题，翻译功能将被跳过。")
-    dashscope_available = False
+    print(f"提示: dashscope 库加载失败 ({str(e)})，翻译和国别分析功能将被跳过。")
 
 
 def safe_click_element(driver, locator, timeout=30):

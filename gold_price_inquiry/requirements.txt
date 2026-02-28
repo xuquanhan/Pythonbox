@@ -1,0 +1,2 @@
+blpapi>=4.0.0
+akshare>=1.12.0
